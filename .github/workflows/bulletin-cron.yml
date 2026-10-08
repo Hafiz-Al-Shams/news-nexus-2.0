@@ -1,0 +1,32 @@
+name: Generate 24hrs News Bulletin
+
+on:
+  schedule:
+    # Every 3 hours: 0:00, 3:00, 6:00, 9:00, 12:00, 15:00, 18:00, 21:00 UTC
+    - cron: '0 */3 * * *'
+  workflow_dispatch: # Manual trigger for testing
+
+jobs:
+  generate-bulletin:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate bulletin
+        env:
+          MONGODB_URI: ${{ secrets.MONGODB_URI }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GUARDIAN_API_KEY: ${{ secrets.GUARDIAN_API_KEY }}
+        run: node --experimental-specifier-resolution=node .github/scripts/generate-bulletin.mjs
