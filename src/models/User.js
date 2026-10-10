@@ -19,6 +19,17 @@ const UserSchema = new mongoose.Schema(
       type: String,
       default: "credentials", // or "google"
     },
+    // NEW: user type - every new user is saved as "user"; you change it to "admin" manually in MongoDB
+    role: {
+      type: String,
+      enum: ["user", "admin"], // only these two values are allowed
+      default: "user",         // all new users (credentials + Google) automatically get "user"
+    },
+    // NEW: updated by the heartbeat ping; used to decide who is online right now
+    lastSeenAt: {
+      type: Date,
+      default: null,
+    },
     // NEW: Daily limits tracking
     dailyLimits: {
       type: Map,

@@ -70,7 +70,7 @@ export const authOptions = {
           const existingUser = await User.findOne({ email: user.email });
 
           if (!existingUser) {
-            // Create new social user
+            // Create new social user (role is saved as "user" automatically by the schema default)
             await User.create({
               name: user.name,
               email: user.email,
@@ -86,8 +86,22 @@ export const authOptions = {
     },
     
     async jwt({ token, user }) {
+      // "user" only exists at the moment of sign-in
       if (user) {
-        token.id = user.id;
+        try {
+          await connectDB();
+
+          // CHANGED: load the real database user so we get the correct id and role
+          // (for Google logins, user.id is Google's id, not our MongoDB id)
+          const dbUser = await User.findOne({ email: user.email }).select("_id role");
+
+          token.id = dbUser ? dbUser._id.toString() : user.id;
+          token.role = dbUser?.role || "user"; // NEW: store role inside the login token
+        } catch (error) {
+          console.error("JWT role lookup error:", error);
+          token.id = user.id;
+          token.role = "user"; // safe default if the database lookup fails
+        }
       }
       return token;
     },
@@ -95,6 +109,7 @@ export const authOptions = {
     async session({ session, token }) {
       if (token) {
         session.user.id = token.id;
+        session.user.role = token.role || "user"; // NEW: expose role to the frontend (used to show the Admin link)
       }
       return session;
     },

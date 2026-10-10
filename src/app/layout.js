@@ -2,6 +2,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import NextAuthProvider from "@/Providers/NextAuthProvider";
 import ReduxProvider from "@/Providers/ReduxProvider";
+import PresenceHeartbeat from "@/components/PresenceHeartbeat"; // NEW
 import { Toaster } from "react-hot-toast";
 
 const geistSans = Geist({
@@ -27,6 +28,8 @@ export default function RootLayout({ children }) {
       >
         <ReduxProvider>
           <NextAuthProvider>
+            {/* NEW: must be inside NextAuthProvider because it uses useSession */}
+            <PresenceHeartbeat />
             {children}
             <Toaster position="top-center" />
           </NextAuthProvider>
@@ -35,4 +38,3 @@ export default function RootLayout({ children }) {
     </html>
   );
 }
-
