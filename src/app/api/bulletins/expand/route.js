@@ -5,6 +5,9 @@ import { authOptions } from '@/app/api/auth/[...nextauth]/route';
 import { connectDB } from '@/lib/mongodb';
 import BulletinCache from '@/models/BulletinCache';
 
+// Same staleness threshold as the 24hrs route (3hr cron schedule + 1hr grace)
+const STALE_AFTER_MS = 4 * 60 * 60 * 1000;
+
 export async function POST(request) {
     try {
         // Check authentication
@@ -27,38 +30,27 @@ export async function POST(request) {
             );
         }
 
-        // GitHub Actions pre-generates detailed cards, so just fetch from cache
-        let cachedBulletin = await BulletinCache.findOne({
+        // Fetch the NEWEST bulletin that has detailed cards, regardless of its age
+        // (GitHub Actions pre-generates the cards together with the bullets)
+        const latestBulletin = await BulletinCache.findOne({
             timeframe: '24hrs',
-            'detailedCards.0': { $exists: true },
-            expiresAt: { $gt: new Date() }
-        });
+            'detailedCards.0': { $exists: true } // must contain at least one card
+        }).sort({ generatedAt: -1 }); // newest first
 
-        if (cachedBulletin && cachedBulletin.detailedCards.length > 0) {
+        if (latestBulletin && latestBulletin.detailedCards.length > 0) {
+            const ageMs = Date.now() - new Date(latestBulletin.generatedAt).getTime();
+            const isStale = ageMs > STALE_AFTER_MS;
+
             return NextResponse.json({
                 success: true,
-                cards: cachedBulletin.detailedCards,
-                fromCache: true
-            });
-        }
-
-        // Fallback: check expired cache
-        cachedBulletin = await BulletinCache.findOne({
-            timeframe: '24hrs',
-            'detailedCards.0': { $exists: true }
-        }).sort({ generatedAt: -1 });
-
-        if (cachedBulletin && cachedBulletin.detailedCards.length > 0) {
-            return NextResponse.json({
-                success: true,
-                cards: cachedBulletin.detailedCards,
+                cards: latestBulletin.detailedCards,
                 fromCache: true,
-                stale: true,
-                message: 'Showing previous details (new ones generating)'
+                stale: isStale, // true when a new bulletin is overdue
+                ...(isStale && { message: 'Showing the latest available details (new ones are being prepared)' })
             });
         }
 
-        // No cache available
+        // No bulletin exists at all
         return NextResponse.json({
             success: false,
             message: 'Detailed cards are being generated. Please try again shortly.',

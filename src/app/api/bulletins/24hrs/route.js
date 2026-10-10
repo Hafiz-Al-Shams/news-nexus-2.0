@@ -5,6 +5,10 @@ import { authOptions } from '@/app/api/auth/[...nextauth]/route';
 import { connectDB } from '@/lib/mongodb';
 import BulletinCache from '@/models/BulletinCache';
 
+// Cron runs every 3 hours; if the bulletin is older than this, we flag it as "stale"
+// (still shown to the user, just marked so the UI can optionally mention it)
+const STALE_AFTER_MS = 4 * 60 * 60 * 1000; // 3hr schedule + 1hr grace for GitHub delays
+
 export async function GET(request) {
     try {
         // Check authentication
@@ -18,38 +22,29 @@ export async function GET(request) {
 
         await connectDB();
 
-        // Try to get valid (non-expired) cache
-        let cachedBulletin = await BulletinCache.findOne({
-            timeframe: '24hrs',
-            expiresAt: { $gt: new Date() }
-        }).sort({ generatedAt: -1 });
-
-        if (cachedBulletin) {
-            return NextResponse.json({
-                success: true,
-                bullets: cachedBulletin.bullets,
-                cachedAt: cachedBulletin.generatedAt,
-                fromCache: true
-            });
-        }
-
-        // Fallback: Try to get ANY cache (even expired)
-        cachedBulletin = await BulletinCache.findOne({
+        // Always fetch the NEWEST bulletin, regardless of its age.
+        // The cron job deletes older ones when it creates a new bulletin,
+        // and the 24hr TTL removes it automatically if the cron job stops completely.
+        const latestBulletin = await BulletinCache.findOne({
             timeframe: '24hrs'
-        }).sort({ generatedAt: -1 });
+        }).sort({ generatedAt: -1 }); // newest first
 
-        if (cachedBulletin) {
+        if (latestBulletin) {
+            // Check how old the bulletin is (so we can tell the UI if the cron job is running late)
+            const ageMs = Date.now() - new Date(latestBulletin.generatedAt).getTime();
+            const isStale = ageMs > STALE_AFTER_MS;
+
             return NextResponse.json({
                 success: true,
-                bullets: cachedBulletin.bullets,
-                cachedAt: cachedBulletin.generatedAt,
+                bullets: latestBulletin.bullets,
+                cachedAt: latestBulletin.generatedAt,
                 fromCache: true,
-                stale: true,
-                message: 'Showing previous bulletin (new one generating)'
+                stale: isStale, // true when a new bulletin is overdue
+                ...(isStale && { message: 'A new bulletin is being prepared. Showing the latest available one.' })
             });
         }
 
-        // No cache exists at all
+        // Only happens on a brand-new setup, or if no bulletin was generated for 24+ hours
         return NextResponse.json({
             success: false,
             message: 'Bulletin is being generated. Please check back in a few minutes.',

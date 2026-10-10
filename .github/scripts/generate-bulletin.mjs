@@ -6,6 +6,9 @@ const ai = new GoogleGenAI({
     apiKey: process.env.GEMINI_API_KEY,
 });
 
+// How long a bulletin stays in the database before MongoDB's TTL index removes it (safety net)
+const BULLETIN_LIFETIME_MS = 24 * 60 * 60 * 1000; // 24 hours
+
 // Define schema inline (outside Next.js context)
 const BulletinCacheSchema = new mongoose.Schema({
     timeframe: {
@@ -43,6 +46,7 @@ const BulletinCacheSchema = new mongoose.Schema({
 });
 
 BulletinCacheSchema.index({ timeframe: 1, expiresAt: 1 });
+// TTL index: MongoDB auto-deletes a bulletin once its expiresAt (24hrs after creation) passes
 BulletinCacheSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 
 const BulletinCache = mongoose.models.BulletinCache || mongoose.model('BulletinCache', BulletinCacheSchema);
@@ -186,13 +190,12 @@ async function main() {
         const processingTime = Date.now() - overallStart;
 
         // Step 4: Save to database
+        // IMPORTANT: if anything above failed, we never reach this point,
+        // so the previous bulletin stays untouched and users keep seeing it.
         console.log('Saving to database...');
-        
-        // Delete old bulletins
-        await BulletinCache.deleteMany({ timeframe: '24hrs' });
 
-        // Create new bulletin with both bullets and detailed cards
-        await BulletinCache.create({
+        // Create the NEW bulletin first (lives for 24 hours)
+        const newBulletin = await BulletinCache.create({
             timeframe: '24hrs',
             bullets,
             detailedCards,
@@ -201,13 +204,21 @@ async function main() {
                 url: a.webUrl,
                 publishedAt: a.webPublicationDate
             })),
-            expiresAt: new Date(Date.now() + 3 * 60 * 60 * 1000), // 3 hours
+            expiresAt: new Date(Date.now() + BULLETIN_LIFETIME_MS), // 24 hours (was 3 hours)
             generationMetadata: {
                 guardianArticlesFetched: articles.length,
                 processingTimeMs: processingTime,
                 detailsGeneratedAt: new Date()
             }
         });
+
+        // ONLY NOW delete the old bulletins (everything except the one we just created)
+        // This guarantees there is never a moment where the database has no bulletin
+        const deleteResult = await BulletinCache.deleteMany({
+            timeframe: '24hrs',
+            _id: { $ne: newBulletin._id } // keep the new one, remove all older ones
+        });
+        console.log(`Deleted ${deleteResult.deletedCount} old bulletin(s)`);
 
         console.log('Bulletin saved successfully!');
         console.log(`Total processing time: ${processingTime}ms`);

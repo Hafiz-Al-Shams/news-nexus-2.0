@@ -42,23 +42,29 @@ const BulletinCacheSchema = new mongoose.Schema({
         default: Date.now
     },
 
+    // Set by the cron job to (creation time + 24 hours).
+    // This is only a safety net: the old bulletin is normally deleted by the cron job
+    // when a NEW bulletin is created, not by this expiry.
     expiresAt: {
         type: Date,
         required: true
-        // REMOVED: index: true
     },
 
     generationMetadata: {
         guardianArticlesFetched: Number,
         geminiTokensUsed: Number,
-        processingTimeMs: Number
+        processingTimeMs: Number,
+        detailsGeneratedAt: Date // added so it matches what the cron script saves
     }
 });
+
+// Index for quickly finding the latest bulletin of a timeframe
+BulletinCacheSchema.index({ timeframe: 1, generatedAt: -1 });
 
 // Index for finding valid cache
 BulletinCacheSchema.index({ timeframe: 1, expiresAt: 1 });
 
-// Auto-delete expired documents
+// TTL: auto-delete a bulletin 24 hours after creation (only if no newer bulletin replaced it)
 BulletinCacheSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 
 export default mongoose.models.BulletinCache || mongoose.model('BulletinCache', BulletinCacheSchema);
