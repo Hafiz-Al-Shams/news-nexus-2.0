@@ -11,7 +11,7 @@ import Link from "next/link";
 export default function Bulletin24HrsPage() {
     const router = useRouter();
     const dispatch = useDispatch();
-    const { data: session } = useSession();
+    const { data: session, status } = useSession(); // CHANGED: also read "status" to know if the visitor is logged in
     const { bulletin } = useSelector((state) => state.news);
     const [showDetails, setShowDetails] = useState(false);
     const [showReview, setShowReview] = useState(false);
@@ -135,12 +135,23 @@ export default function Bulletin24HrsPage() {
                                     <div className="text-center">
                                         <h4 className="text-lg sm:text-xl font-semibold text-gray-800 mb-2">How was this feature?</h4>
                                         <p className="text-sm sm:text-base text-gray-600 mb-4">Your feedback helps us improve</p>
-                                        <button
-                                            onClick={() => setShowReview(true)}
-                                            className="px-6 sm:px-8 py-2.5 sm:py-3 bg-gradient-to-r from-[#1C3B7A] to-[#104AC2] text-white rounded-lg hover:from-[#153163] hover:to-[#0d3a9f] transition-all font-semibold text-sm sm:text-base"
-                                        >
-                                            Leave a Review
-                                        </button>
+
+                                        {/* CHANGED: reviews are saved per user, so logged-out visitors are asked to log in first */}
+                                        {status === "unauthenticated" ? (
+                                            <Link
+                                                href="/login"
+                                                className="inline-block px-6 sm:px-8 py-2.5 sm:py-3 bg-gradient-to-r from-[#1C3B7A] to-[#104AC2] text-white rounded-lg hover:from-[#153163] hover:to-[#0d3a9f] transition-all font-semibold text-sm sm:text-base"
+                                            >
+                                                Login to Leave a Review
+                                            </Link>
+                                        ) : (
+                                            <button
+                                                onClick={() => setShowReview(true)}
+                                                className="px-6 sm:px-8 py-2.5 sm:py-3 bg-gradient-to-r from-[#1C3B7A] to-[#104AC2] text-white rounded-lg hover:from-[#153163] hover:to-[#0d3a9f] transition-all font-semibold text-sm sm:text-base"
+                                            >
+                                                Leave a Review
+                                            </button>
+                                        )}
                                     </div>
                                 ) : (
                                     <div className="space-y-4">

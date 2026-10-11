@@ -15,7 +15,7 @@ export default function LeftSidebar({ isDrawerMode = false, onLinkClick }) {
   const { user, isAuthenticated } = useSelector((state) => state.user);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
-  // NEW: true only for users whose role is "admin" (role comes from the login session)
+  // True only for users whose role is "admin" (role comes from the login session)
   const isAdmin = isAuthenticated && user?.role === "admin";
 
   const handleLogout = async () => {
@@ -32,13 +32,10 @@ export default function LeftSidebar({ isDrawerMode = false, onLinkClick }) {
     }
   };
 
+  // CHANGED: the bulletin is public now, so everyone goes straight to it
+  // (before, logged-out visitors were redirected to the login page)
   const handleBulletinClick = () => {
-    if (!isAuthenticated) {
-      toast.error("Please login to view bulletins");
-      router.push("/login");
-    } else {
-      router.push("/bulletins/24hrs");
-    }
+    router.push("/bulletins/24hrs");
     if (onLinkClick) onLinkClick();
   };
 
@@ -74,7 +71,7 @@ export default function LeftSidebar({ isDrawerMode = false, onLinkClick }) {
 
       <div className="border-t border-gray-200"></div>
 
-      {/* NewsNexus Assistant */}
+      {/* NewsNexus Assistant (the chat page itself asks logged-out visitors to log in) */}
       <div className="px-4 py-4">
         <Link
           href="/chat-with-ai"
@@ -88,7 +85,7 @@ export default function LeftSidebar({ isDrawerMode = false, onLinkClick }) {
         </Link>
       </div>
 
-      {/* NEW: Admin Dashboard link - only rendered for admins (also appears in the mobile drawer) */}
+      {/* Admin Dashboard link - only rendered for admins (also appears in the mobile drawer) */}
       {isAdmin && (
         <>
           <div className="border-t border-gray-200"></div>

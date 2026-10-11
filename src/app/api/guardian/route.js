@@ -1,7 +1,6 @@
 // src/app/api/guardian/route.js
 import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/app/api/auth/[...nextauth]/route";
+// CHANGED: removed getServerSession / authOptions imports, this route is now PUBLIC (no login needed)
 import mongoose from 'mongoose';
 import GuardianCache from '@/models/GuardianCache';
 import {
@@ -12,6 +11,9 @@ import {
 
 const GUARDIAN_API_KEY = process.env.GUARDIAN_API_KEY;
 const MONGO_URI = process.env.MONGODB_URI;
+
+// NEW: the only time filters we accept (anything else falls back to "24h")
+const ALLOWED_TIMES = ["1h", "24h", "3d", "7d"];
 
 // Ensure MongoDB connection
 async function ensureDb() {
@@ -29,15 +31,8 @@ function generateCacheKey(params) {
 
 export async function GET(request) {
   try {
-    // Check authentication
-    const session = await getServerSession(authOptions);
-
-    if (!session) {
-      return NextResponse.json(
-        { error: "Unauthorized. Please login to access news." },
-        { status: 401 }
-      );
-    }
+    // CHANGED: the login check was removed here so logged-out visitors can read the news.
+    // The cache below protects your Guardian API quota from heavy public traffic.
 
     if (!GUARDIAN_API_KEY) {
       console.error("GUARDIAN_API_KEY is not configured");
@@ -49,8 +44,13 @@ export async function GET(request) {
 
     // Get query parameters
     const { searchParams } = new URL(request.url);
-    const time = searchParams.get("time") || "24h";
-    const topic = searchParams.get("topic") || "all";
+
+    // CHANGED: validate public input, unknown values fall back to safe defaults.
+    // This stops strangers from creating unlimited cache entries / Guardian API calls with random values.
+    const rawTime = searchParams.get("time");
+    const rawTopic = searchParams.get("topic");
+    const time = ALLOWED_TIMES.includes(rawTime) ? rawTime : "24h";
+    const topic = Object.prototype.hasOwnProperty.call(GUARDIAN_TOPIC_MAP, rawTopic) ? rawTopic : "all";
 
     console.log("\n===== GUARDIAN API REQUEST =====");
     console.log("Time:", time);

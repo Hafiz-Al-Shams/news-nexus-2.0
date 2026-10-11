@@ -1,7 +1,6 @@
 // src/app/api/bulletins/expand/route.js
 import { NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/app/api/auth/[...nextauth]/route';
+// CHANGED: removed getServerSession / authOptions imports, this route is now PUBLIC (no login needed)
 import { connectDB } from '@/lib/mongodb';
 import BulletinCache from '@/models/BulletinCache';
 
@@ -10,14 +9,8 @@ const STALE_AFTER_MS = 4 * 60 * 60 * 1000;
 
 export async function POST(request) {
     try {
-        // Check authentication
-        const session = await getServerSession(authOptions);
-        if (!session) {
-            return NextResponse.json(
-                { error: 'Unauthorized - Please login' },
-                { status: 401 }
-            );
-        }
+        // CHANGED: the login check was removed. This route does NOT call Gemini,
+        // it only reads the detailed cards the cron job already generated, so it is safe to keep public.
 
         await connectDB();
 

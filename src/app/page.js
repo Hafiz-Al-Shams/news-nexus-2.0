@@ -76,7 +76,10 @@ export default function Home() {
   }
 
   return (
-    <>
+    // CHANGED: the fragment (<>) became a plain <div>. Next.js checks the FIRST element of the page
+    // when scrolling after navigation; it used to be the sticky MobileHeader (which caused the warning).
+    // Now the first element is this normal wrapper, and the header stays sticky inside it.
+    <div>
       {/* Mobile Header - Only visible on small screens */}
       <MobileHeader
         onMenuClick={handleMenuClick}
@@ -96,91 +99,35 @@ export default function Home() {
         leftSidebar={<LeftSidebar />}
         mainContent={
           <MainContent>
-            {isAuthenticated && user ? (
-              // Logged In - Show News
-              <NewsSection />
-            ) : (
-              // Not Logged In - Landing Page
-              <div className="flex items-center justify-center min-h-[80vh] px-4">
-                <div className="text-center max-w-2xl w-full">
-                  {/* Hero Icon */}
-                  <div className="mb-6">
-                    <div className="inline-block p-4 md:p-6 bg-gradient-to-br from-[#1C3B7A] to-[#104AC2] rounded-full mb-4 shadow-lg">
-                      <svg
-                        className="w-16 md:w-20 h-16 md:h-20 text-white"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z"
-                        />
-                      </svg>
-                    </div>
-                  </div>
-
-                  {/* Hero Text */}
-                  <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold text-gray-800 mb-4">
-                    Welcome to NewsNexus
-                  </h2>
-                  <p className="text-base md:text-lg lg:text-xl text-gray-600 mb-8">
-                    An AI-powered web-application for aggregating and summarizing current world news using AI, with customizable filters for time, region, and type.
+            {/* Banner for logged-out visitors, explains that AI features need a login.
+                Uses session status (not Redux) so it never flashes for logged-in users. */}
+            {status === "unauthenticated" && (
+              <div className="mb-6 bg-gradient-to-r from-[#1C3B7A] to-[#104AC2] text-white rounded-xl p-4 md:p-5 shadow-md flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                <div>
+                  <p className="font-semibold text-base md:text-lg">Sign in to unlock AI features</p>
+                  <p className="text-sm text-blue-100">
+                    You can read the news and the AI bulletin for free. Log in to summarize articles with AI and chat with the AI assistant.
                   </p>
-
-                  {/* CTA Buttons */}
-                  <div className="flex flex-col sm:flex-row gap-4 justify-center mb-12">
-                    <Link
-                      href="/login"
-                      className="px-6 md:px-8 py-3 md:py-4 bg-gradient-to-r from-[#1C3B7A] to-[#104AC2] text-white rounded-lg hover:from-[#153163] hover:to-[#0d3a9f] transition-all shadow-lg hover:shadow-xl font-semibold text-base md:text-lg"
-                    >
-                      Get Started - Login
-                    </Link>
-                    <Link
-                      href="/signup"
-                      className="px-6 md:px-8 py-3 md:py-4 bg-white text-gray-700 border-2 border-gray-300 rounded-lg hover:border-[#104AC2] hover:text-[#104AC2] transition-all font-semibold text-base md:text-lg"
-                    >
-                      Create Account
-                    </Link>
-                  </div>
-
-                  {/* Features */}
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 md:gap-6 mt-12">
-                    <div className="bg-white rounded-lg p-4 md:p-6 shadow-sm border border-gray-200">
-                      <div className="text-3xl md:text-4xl mb-3">🌍</div>
-                      <h3 className="font-semibold text-gray-800 mb-2 text-sm md:text-base">
-                        Global Coverage
-                      </h3>
-                      <p className="text-xs md:text-sm text-gray-600">
-                        News from Asia, Europe, America, and worldwide
-                      </p>
-                    </div>
-
-                    <div className="bg-white rounded-lg p-4 md:p-6 shadow-sm border border-gray-200">
-                      <div className="text-3xl md:text-4xl mb-3">⏰</div>
-                      <h3 className="font-semibold text-gray-800 mb-2 text-sm md:text-base">
-                        Real-Time Updates
-                      </h3>
-                      <p className="text-xs md:text-sm text-gray-600">
-                        Get news from the last hour to 24 hours
-                      </p>
-                    </div>
-
-                    <div className="bg-white rounded-lg p-4 md:p-6 shadow-sm border border-gray-200">
-                      <div className="text-3xl md:text-4xl mb-3">📰</div>
-                      <h3 className="font-semibold text-gray-800 mb-2 text-sm md:text-base">
-                        Multiple Categories
-                      </h3>
-                      <p className="text-xs md:text-sm text-gray-600">
-                        Science, Sports, Business, Technology & more
-                      </p>
-                    </div>
-                  </div>
+                </div>
+                <div className="flex gap-3 flex-shrink-0">
+                  <Link
+                    href="/login"
+                    className="px-5 py-2 bg-white text-[#104AC2] rounded-lg font-semibold text-sm hover:bg-blue-50 transition-colors"
+                  >
+                    Login
+                  </Link>
+                  <Link
+                    href="/signup"
+                    className="px-5 py-2 border border-white text-white rounded-lg font-semibold text-sm hover:bg-white/10 transition-colors"
+                  >
+                    Sign Up
+                  </Link>
                 </div>
               </div>
             )}
+
+            {/* The news section is shown to EVERYONE (logged in or not) */}
+            <NewsSection />
           </MainContent>
         }
         rightSidebar={<RightSidebar />}
@@ -227,6 +174,6 @@ export default function Home() {
           </div>
         </div>
       </Link>
-    </>
+    </div>
   );
 }

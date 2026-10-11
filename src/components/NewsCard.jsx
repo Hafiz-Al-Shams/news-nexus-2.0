@@ -1,9 +1,14 @@
 "use client";
 
 import { useState } from "react";
+import { useSession } from "next-auth/react"; // NEW: to know if the visitor is logged in
+import { useRouter } from "next/navigation"; // NEW: to send logged-out visitors to the login page
+import toast from "react-hot-toast"; // NEW: to show the "please login" message
 import SummaryModal from "./SummaryModal";
 
 export default function NewsCard({ article }) {
+  const router = useRouter();
+  const { status } = useSession(); // "authenticated" | "unauthenticated" | "loading"
   const [imageError, setImageError] = useState(false);
   const [showModal, setShowModal] = useState(false);
 
@@ -21,7 +26,18 @@ export default function NewsCard({ article }) {
   const handleSummarizeClick = (e) => {
     e.preventDefault();
     e.stopPropagation();
-    setShowModal(true);
+
+    // NEW: AI summaries need a login, so logged-out visitors are sent to the login page
+    if (status === "unauthenticated") {
+      toast.error("Please login to use AI summaries");
+      router.push("/login");
+      return;
+    }
+
+    // Session still loading, ignore the click instead of guessing
+    if (status === "loading") return;
+
+    setShowModal(true); // logged-in users open the summary modal as before
   };
 
   return (
@@ -98,13 +114,14 @@ export default function NewsCard({ article }) {
               onClick={handleSummarizeClick}
               className="flex-1 px-4 py-2 bg-gradient-to-r from-[#104AC2] to-[#1C3B7A] text-white text-sm font-medium rounded-lg hover:from-[#0d3a9f] hover:to-[#153163] transition-all text-center"
             >
-              Summarize with AI
+              {/* NEW: label tells logged-out visitors that a login is required */}
+              {status === "unauthenticated" ? "Login to Summarize" : "Summarize with AI"}
             </button>
           </div>
         </div>
       </div>
 
-      {/* Summary Modal */}
+      {/* Summary Modal (only ever opened for logged-in users) */}
       <SummaryModal
         isOpen={showModal}
         onClose={() => setShowModal(false)}
