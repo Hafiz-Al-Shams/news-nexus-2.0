@@ -1,3 +1,4 @@
+// src>app>page.js  (MODIFIED)
 "use client";
 
 import { signOut, useSession } from "next-auth/react";
@@ -7,7 +8,7 @@ import { setUser, logout as reduxLogout } from "@/store/slices/userSlice";
 import toast from "react-hot-toast";
 import Link from "next/link";
 import NewsSection from "@/components/NewsSection";
-import Swal from "sweetalert2";
+// REMOVED: import Swal from "sweetalert2"; (it was only used by the "Still Under Raw Development" modal)
 import MainLayout from "@/components/layout/MainLayout";
 import LeftSidebar from "@/components/layout/LeftSidebar";
 import RightSidebar from "@/components/layout/RightSidebar";
@@ -25,24 +26,14 @@ export default function Home() {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isUserModalOpen, setIsUserModalOpen] = useState(false);
 
-  // Show development alert on first load
-  useEffect(() => {
-    Swal.fire({
-      title: "Still Under Raw Development",
-      text: "This website is currently under development. Some features may not work as expected.",
-      icon: "info",
-      confirmButtonText: "View Anyway",
-      confirmButtonColor: "#104AC2",
-      allowOutsideClick: false,
-    });
-  }, []);
+  // REMOVED: the useEffect that showed the "Still Under Raw Development" Swal modal on every homepage load
 
   // Sync NextAuth session with Redux store
   useEffect(() => {
     if (session?.user) {
-      dispatch(setUser(session.user));
+      dispatch(setUser(session.user)); // logged in: save user in Redux
     } else if (status !== "loading") {
-      dispatch(reduxLogout());
+      dispatch(reduxLogout()); // logged out: clear Redux user
     }
   }, [session, status, dispatch]);
 
@@ -76,9 +67,7 @@ export default function Home() {
   }
 
   return (
-    // CHANGED: the fragment (<>) became a plain <div>. Next.js checks the FIRST element of the page
-    // when scrolling after navigation; it used to be the sticky MobileHeader (which caused the warning).
-    // Now the first element is this normal wrapper, and the header stays sticky inside it.
+    // Plain <div> wrapper (not a fragment) so Next.js scroll check doesn't hit the sticky MobileHeader
     <div>
       {/* Mobile Header - Only visible on small screens */}
       <MobileHeader
