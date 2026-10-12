@@ -8,8 +8,8 @@ export async function middleware(request) {
   });
   const isLoggedIn = !!token;
 
-  // Protected routes (currently empty, add routes here as needed in the future)
-  const protectedRoutes = [];
+  // Protected routes: visitors who are not logged in are sent to the login page
+  const protectedRoutes = ["/newsletter"]; // CHANGED: was empty, the newsletter page now requires login
   const isProtectedRoute = protectedRoutes.some((route) =>
     request.nextUrl.pathname.startsWith(route)
   );
@@ -17,7 +17,7 @@ export async function middleware(request) {
   // Redirect to login if accessing protected route without authentication
   if (isProtectedRoute && !isLoggedIn) {
     const loginUrl = new URL("/login", request.url);
-    loginUrl.searchParams.set("callbackUrl", request.nextUrl.pathname);
+    loginUrl.searchParams.set("callbackUrl", request.nextUrl.pathname); // remembers where the visitor wanted to go
     return NextResponse.redirect(loginUrl);
   }
 
@@ -38,6 +38,7 @@ export const config = {
   matcher: [
     "/login",
     "/signup",
+    "/newsletter/:path*", // CHANGED: added, so the middleware actually runs on /newsletter (without this line the check never happens)
     // Add more protected routes here as needed in the future
     // Example: "/user-dashboard/:path*",
   ],
