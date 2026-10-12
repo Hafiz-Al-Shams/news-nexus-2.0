@@ -1,10 +1,13 @@
+// src>components>layout>MobileHeader.jsx  (MODIFIED)
 "use client";
 
 import { VscMenu } from "react-icons/vsc";
-import { useSelector } from "react-redux";
+import { useSession } from "next-auth/react"; // CHANGED: reads the session directly instead of Redux
 
 export default function MobileHeader({ onMenuClick, onUserClick }) {
-  const { user, isAuthenticated } = useSelector((state) => state.user);
+  const { data: session } = useSession();
+  const user = session?.user || null; // CHANGED: known from the first paint thanks to the server session
+  const isAuthenticated = !!user;
 
   return (
     <header className="md:hidden sticky top-0 z-50 bg-white border-b border-gray-200 px-4 py-3">
@@ -24,13 +27,13 @@ export default function MobileHeader({ onMenuClick, onUserClick }) {
           <span className="text-gray-500/95">NEXUS</span>
         </h1>
 
-        {/* User Circle */}
+        {/* User Circle (first letter of the name, or "?" when logged out) */}
         <button
           onClick={onUserClick}
           className="w-8 h-8 bg-gradient-to-br from-[#1C3B7A] to-[#104AC2] rounded-full flex items-center justify-center text-white font-bold text-sm hover:opacity-90 transition-opacity"
           aria-label="User menu"
         >
-          {isAuthenticated && user
+          {isAuthenticated
             ? (user.name?.[0]?.toUpperCase() || user.email?.[0]?.toUpperCase() || "U")
             : "?"}
         </button>

@@ -1,7 +1,8 @@
+// src>components>layout>UserModal.jsx  (MODIFIED)
 "use client";
 
-import { signOut } from "next-auth/react";
-import { useDispatch, useSelector } from "react-redux";
+import { signOut, useSession } from "next-auth/react"; // CHANGED: also reads the session directly
+import { useDispatch } from "react-redux";
 import { logout as reduxLogout } from "@/store/slices/userSlice";
 import { useState } from "react";
 import toast from "react-hot-toast";
@@ -9,7 +10,9 @@ import Link from "next/link";
 
 export default function UserModal({ isOpen, onClose }) {
   const dispatch = useDispatch();
-  const { user, isAuthenticated } = useSelector((state) => state.user);
+  const { data: session } = useSession();
+  const user = session?.user || null; // CHANGED: no more waiting for Redux
+  const isAuthenticated = !!user;
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   const handleLogout = async () => {
@@ -37,7 +40,7 @@ export default function UserModal({ isOpen, onClose }) {
         className="bg-white rounded-xl shadow-2xl max-w-sm w-full p-6"
         onClick={(e) => e.stopPropagation()}
       >
-        {isAuthenticated && user ? (
+        {isAuthenticated ? (
           <>
             {/* User Info */}
             <div className="text-center mb-6">

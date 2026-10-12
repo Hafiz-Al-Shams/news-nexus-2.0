@@ -8,7 +8,6 @@ import { setUser, logout as reduxLogout } from "@/store/slices/userSlice";
 import toast from "react-hot-toast";
 import Link from "next/link";
 import NewsSection from "@/components/NewsSection";
-// REMOVED: import Swal from "sweetalert2"; (it was only used by the "Still Under Raw Development" modal)
 import MainLayout from "@/components/layout/MainLayout";
 import LeftSidebar from "@/components/layout/LeftSidebar";
 import RightSidebar from "@/components/layout/RightSidebar";
@@ -25,8 +24,6 @@ export default function Home() {
   // Mobile drawer and modal states
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isUserModalOpen, setIsUserModalOpen] = useState(false);
-
-  // REMOVED: the useEffect that showed the "Still Under Raw Development" Swal modal on every homepage load
 
   // Sync NextAuth session with Redux store
   useEffect(() => {
@@ -54,17 +51,9 @@ export default function Home() {
     setIsUserModalOpen(false);
   };
 
-  // Loading state
-  if (status === "loading") {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center">
-          <div className="inline-block w-16 h-16 border-4 border-[#104AC2] border-t-transparent rounded-full animate-spin mb-4"></div>
-          <p className="text-gray-600 text-lg">Loading...</p>
-        </div>
-      </div>
-    );
-  }
+  // REMOVED: the full-screen "Loading..." block (if status === "loading").
+  // The news is public, so the page now renders immediately and the news starts loading
+  // at the same time as the login check, instead of waiting for it.
 
   return (
     // Plain <div> wrapper (not a fragment) so Next.js scroll check doesn't hit the sticky MobileHeader

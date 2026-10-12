@@ -1,4 +1,4 @@
-// src/store/slices/newsSlice.js
+// src>store>slices>newsSlice.js  (MODIFIED)
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 
 const initialState = {
@@ -12,14 +12,14 @@ const initialState = {
   guardianLoading: false,       // true while the FIRST page of a filter is loading (spinner replaces the grid)
   guardianError: null,
 
-  // NEW: pagination ("Load More News") for the Guardian articles
+  // Pagination ("Load More News") for the Guardian articles
   guardianPage: 0,              // last page that was loaded (0 = nothing loaded yet)
   guardianHasMore: false,       // true when the server says another page exists
   guardianLoadingMore: false,   // true while "Load More News" is loading (grid stays visible)
   guardianCachedAt: null,       // when the shown news was fetched from Guardian (for "News updated X ago")
   guardianTotal: 0,             // total number of matching articles reported by Guardian
 
-  // NEW: the filters that the articles on screen were actually loaded with.
+  // The filters that the articles on screen were actually loaded with.
   // The "Get The News" button is enabled only when the selected filters differ from these.
   appliedFilters: {
     time: "24h",
@@ -52,7 +52,7 @@ const initialState = {
   guardianLastFetched: null,
 };
 
-// Fetch 24hrs bulletin (bullets only)
+// Fetch 24hrs bulletin (bullets AND detailed cards, both come from the same request now)
 export const fetch24hrsBulletin = createAsyncThunk(
   'news/fetch24hrsBulletin',
   async (_, { rejectWithValue }) => {
@@ -71,7 +71,7 @@ export const fetch24hrsBulletin = createAsyncThunk(
   }
 );
 
-// Expand bulletin into detailed cards
+// Expand bulletin into detailed cards (kept as a fallback, only used if the cards did not arrive with the bulletin)
 export const expandBulletinDetails = createAsyncThunk(
   'news/expandBulletinDetails',
   async (bullets, { rejectWithValue }) => {
@@ -126,7 +126,7 @@ export const fetchGuardianArticles = createAsyncThunk(
       const params = new URLSearchParams({
         time: filters.time || '24h',
         topic: filters.topic || 'all',
-        page: '1' // CHANGED: always the first page, "Load More" handles the following pages
+        page: '1' // always the first page, "Load More" handles the following pages
       });
       
       const response = await fetch(`/api/guardian?${params.toString()}`);
@@ -142,12 +142,12 @@ export const fetchGuardianArticles = createAsyncThunk(
     }
   },
   {
-    // NEW: ignore the request if a first-page load is already running (stops double requests, e.g. React dev double-mount)
+    // Ignore the request if a first-page load is already running (stops double requests, e.g. React dev double-mount)
     condition: (_, { getState }) => !getState().news.guardianLoading,
   }
 );
 
-// NEW: loads the NEXT 30 articles for the filters currently shown and adds them below the existing ones
+// Loads the NEXT 30 articles for the filters currently shown and adds them below the existing ones
 export const loadMoreGuardianArticles = createAsyncThunk(
   'news/loadMoreGuardian',
   async (_, { getState, rejectWithValue }) => {
@@ -172,7 +172,7 @@ export const loadMoreGuardianArticles = createAsyncThunk(
     }
   },
   {
-    // NEW: only run when more news exists and nothing else is loading
+    // Only run when more news exists and nothing else is loading
     condition: (_, { getState }) => {
       const s = getState().news;
       return s.guardianHasMore && !s.guardianLoading && !s.guardianLoadingMore;
@@ -228,7 +228,7 @@ const newsSlice = createSlice({
       state.guardianError = null;
       state.lastFetched = null;
       state.guardianLastFetched = null;
-      // NEW: also reset the pagination data
+      // Also reset the pagination data
       state.guardianPage = 0;
       state.guardianHasMore = false;
       state.guardianLoadingMore = false;
@@ -276,7 +276,7 @@ const newsSlice = createSlice({
         state.guardianArticles = action.payload.articles || [];
         state.guardianLastFetched = new Date().toISOString();
         state.guardianError = null;
-        // NEW: pagination info + remember which filters these articles belong to
+        // Pagination info + remember which filters these articles belong to
         state.guardianPage = action.payload.page || 1;
         state.guardianHasMore = !!action.payload.hasMore;
         state.guardianTotal = action.payload.total || 0;
@@ -291,7 +291,7 @@ const newsSlice = createSlice({
         state.guardianError = action.payload?.message || 'Failed to fetch Guardian articles';
       });
 
-    // NEW: Guardian "Load More News" reducers (adds the next page below the current articles)
+    // Guardian "Load More News" reducers (adds the next page below the current articles)
     builder
       .addCase(loadMoreGuardianArticles.pending, (state) => {
         state.guardianLoadingMore = true;
@@ -326,6 +326,9 @@ const newsSlice = createSlice({
       .addCase(fetch24hrsBulletin.fulfilled, (state, action) => {
         state.bulletin.loading = false;
         state.bulletin.bullets = action.payload.bullets || [];
+        // NEW: save the detailed cards that now arrive together with the bullets,
+        // so "Show More Details" can open instantly without another request
+        state.bulletin.detailedCards = action.payload.detailedCards || [];
         state.bulletin.lastFetched = new Date().toISOString();
         state.bulletin.cachedAt = action.payload.cachedAt;
         state.bulletin.error = null;
@@ -335,7 +338,7 @@ const newsSlice = createSlice({
         state.bulletin.error = action.payload?.message || 'Failed to fetch bulletin';
       });
     
-    // Bulletin detail expansion reducers
+    // Bulletin detail expansion reducers (fallback path only)
     builder
       .addCase(expandBulletinDetails.pending, (state) => {
         state.bulletin.loading = true;

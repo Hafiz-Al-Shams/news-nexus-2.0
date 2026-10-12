@@ -1,7 +1,8 @@
+// src>components>layout>LeftSidebar.jsx  (MODIFIED)
 "use client";
 
 import { useSession, signOut } from "next-auth/react";
-import { useDispatch, useSelector } from "react-redux";
+import { useDispatch } from "react-redux";
 import { logout as reduxLogout } from "@/store/slices/userSlice";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -10,10 +11,14 @@ import toast from "react-hot-toast";
 
 export default function LeftSidebar({ isDrawerMode = false, onLinkClick }) {
   const router = useRouter();
-  const { data: session } = useSession();
+  const { data: session, status } = useSession(); // CHANGED: the session itself is now the source of truth
   const dispatch = useDispatch();
-  const { user, isAuthenticated } = useSelector((state) => state.user);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+
+  // CHANGED: user / login state come straight from the session (no waiting for Redux to be filled)
+  const user = session?.user || null;
+  const isAuthenticated = !!user;
+  const isSessionLoading = status === "loading"; // only true in rare cases now, shows a placeholder instead of "Sign In"
 
   // True only for users whose role is "admin" (role comes from the login session)
   const isAdmin = isAuthenticated && user?.role === "admin";
@@ -108,7 +113,6 @@ export default function LeftSidebar({ isDrawerMode = false, onLinkClick }) {
         <>
           <div className="border-t border-gray-200"></div>
           <div className="px-4 py-4">
-            {/* CHANGED: was a dead <button>, now a link to the newsletter page (closes the drawer on click) */}
             <Link
               href="/newsletter"
               onClick={handleAssistantClick}
@@ -125,7 +129,15 @@ export default function LeftSidebar({ isDrawerMode = false, onLinkClick }) {
       ) : (
         /* Desktop/Tablet Mode: Sign In Button or Profile Section */
         <>
-          {isAuthenticated && user ? (
+          {isSessionLoading ? (
+            // NEW: neutral placeholder while the session is unknown (so "Sign In" never flashes for a logged-in user)
+            <>
+              <div className="px-4 py-4">
+                <div className="w-full h-12 bg-gray-100 rounded-lg animate-pulse"></div>
+              </div>
+              <div className="border-t border-gray-200"></div>
+            </>
+          ) : isAuthenticated ? (
             <>
               <div className="border-t border-gray-200"></div>
               <div className="px-4 py-4">
