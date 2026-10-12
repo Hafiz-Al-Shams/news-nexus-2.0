@@ -1,18 +1,30 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { useRouter } from "next/navigation";
-import Link from "next/link"; // NEW: used for the tablet "Subscribe Newsletter" link
+import Link from "next/link"; // used for the tablet "Subscribe Newsletter" link
 import {
   fetchNewsAPIArticles,
   fetchGuardianArticles,
+  loadMoreGuardianArticles, // NEW: loads the next 30 articles
   setActiveSource,
 } from "@/store/slices/newsSlice";
 import NewsFilters from "./NewsFilters";
 import NewsCard from "./NewsCard";
 import ReviewsAccordion from "./layout/ReviewsAccordion";
 import toast from "react-hot-toast";
+
+// NEW: turns a date into "just now", "5m ago", "3h ago" (shown as "News updated 3h ago")
+function formatUpdated(dateString) {
+  if (!dateString) return null;
+  const minutes = Math.floor((Date.now() - new Date(dateString).getTime()) / 60000);
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return new Date(dateString).toLocaleDateString();
+}
 
 export default function NewsSection() {
   const router = useRouter();
@@ -25,12 +37,25 @@ export default function NewsSection() {
     error,
     guardianError,
     filters,
-    activeSource 
+    appliedFilters,          // NEW: the filters the articles on screen were loaded with
+    activeSource,
+    guardianHasMore,         // NEW: true when "Load More News" has more to load
+    guardianLoadingMore,     // NEW: true while "Load More News" is loading
+    guardianLastFetched,
+    guardianCachedAt,        // NEW: when the shown news was fetched from Guardian
   } = useSelector((state) => state.news);
   
   const [hasFetchedNewsAPI, setHasFetchedNewsAPI] = useState(false);
-  const [hasFetchedGuardian, setHasFetchedGuardian] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+
+  // NEW: load the default news (Last 24 Hours, All Topics) automatically the first time the homepage opens.
+  // Nobody has to click "Get The News" any more. The server answers from the 12-hour database cache.
+  // If the articles are already in Redux (user came back from another page), nothing is reloaded.
+  useEffect(() => {
+    if (guardianLastFetched) return;
+    dispatch(fetchGuardianArticles(filters));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // intentionally runs once when the section appears
 
   // Navigate to bulletin page
   const handleBulletinClick = () => {
@@ -63,21 +88,24 @@ export default function NewsSection() {
     }
   };
 
-  // Fetch Guardian articles
+  // Fetch Guardian articles for the selected filters ("Get The News" button, Try Again, empty state button)
   const fetchGuardianNews = async () => {
     try {
       const result = await dispatch(fetchGuardianArticles(filters)).unwrap();
-      setHasFetchedGuardian(true);
       dispatch(setActiveSource('guardian'));
       
       if (result.articles && result.articles.length > 0) {
-        toast.success(`Loaded ${result.articles.length} articles from Guardian`);
+        if (result.stale) {
+          toast("Guardian is unavailable right now, showing saved news"); // expired cache used as a fallback
+        } else {
+          toast.success(`Loaded ${result.articles.length} articles from Guardian`);
+        }
       } else {
         toast.error("No articles found from Guardian");
       }
     } catch (error) {
+      if (error?.name === 'ConditionError') return; // a load was already running, ignore the extra click
       console.error("Guardian fetch error:", error);
-      setHasFetchedGuardian(true);
       
       if (error.message?.includes("Unauthorized")) {
         toast.error("Please login to view news");
@@ -85,6 +113,22 @@ export default function NewsSection() {
         toast.error("Guardian API rate limit exceeded. Try again tomorrow.");
       } else {
         toast.error(error.message || "Failed to load Guardian articles");
+      }
+    }
+  };
+
+  // NEW: "Load More News" button, adds the next 30 articles below the current ones
+  const handleLoadMore = async () => {
+    try {
+      await dispatch(loadMoreGuardianArticles()).unwrap();
+    } catch (error) {
+      if (error?.name === 'ConditionError') return; // double click or nothing more to load, ignore
+      console.error("Load more error:", error);
+
+      if (error.code === 'RATE_LIMIT_EXCEEDED') {
+        toast.error("Guardian API rate limit exceeded. Try again tomorrow.");
+      } else {
+        toast.error(error.message || "Failed to load more news");
       }
     }
   };
@@ -107,7 +151,19 @@ export default function NewsSection() {
   const currentArticles = getCurrentArticles();
   const currentLoading = getCurrentLoading();
   const currentError = getCurrentError();
-  const hasFetched = activeSource === 'guardian' ? hasFetchedGuardian : hasFetchedNewsAPI;
+
+  // CHANGED: "has the news been requested yet" now comes from Redux (it survives leaving and returning to the page)
+  const hasFetched = activeSource === 'guardian'
+    ? (!!guardianLastFetched || !!guardianError)
+    : hasFetchedNewsAPI;
+
+  // NEW: also show the loading spinner for the very first moment, before the automatic load has started
+  const showLoading = currentLoading || (activeSource === 'guardian' && !hasFetched);
+
+  // NEW: "Get The News" is active only when a filter was changed compared to what is on screen
+  const filtersChanged =
+    filters.time !== appliedFilters.time || filters.topic !== appliedFilters.topic;
+  const canGetNews = filtersChanged && !guardianLoading && !guardianLoadingMore;
 
   return (
     <div className="space-y-6">
@@ -160,7 +216,6 @@ export default function NewsSection() {
 
         {/* Medium/Tablet: Newsletter Button (Right) */}
         <div className="hidden md:block lg:hidden md:w-auto">
-          {/* CHANGED: was a dead <button>, now a link to the newsletter page */}
           <Link
             href="/newsletter"
             className="inline-block px-4 py-2 bg-[#666666] text-white rounded-lg hover:bg-[#555555] transition-colors font-semibold text-sm shadow-md hover:shadow-lg whitespace-nowrap"
@@ -206,11 +261,11 @@ export default function NewsSection() {
         onTopicChange={(topic) => dispatch({ type: 'news/setTopicFilter', payload: topic })}
       />
 
-      {/* Regular News Fetch Button */}
-      <div className="flex justify-center">
+      {/* Get The News Button: disabled until a filter is changed */}
+      <div className="flex flex-col items-center gap-2">
         <button
           onClick={fetchGuardianNews}
-          disabled={guardianLoading}
+          disabled={!canGetNews} // CHANGED: enabled only after a filter changed (and nothing is loading)
           className="px-6 md:px-8 py-3 md:py-4 bg-gradient-to-r from-[#1C3B7A] to-[#104AC2] text-white rounded-lg hover:from-[#153163] hover:to-[#0d3a9f] disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg hover:shadow-xl font-semibold text-base md:text-lg flex items-center justify-center gap-3 min-w-[200px] md:min-w-[240px]"
         >
           {guardianLoading ? (
@@ -227,6 +282,11 @@ export default function NewsSection() {
             </>
           )}
         </button>
+
+        {/* NEW: small hint while the button is disabled */}
+        {!filtersChanged && !guardianLoading && (
+          <p className="text-xs text-gray-500">Change the time range or category above to load different news</p>
+        )}
       </div>
 
       {/* Active Source Indicator */}
@@ -241,8 +301,8 @@ export default function NewsSection() {
         </div>
       )}
 
-      {/* Loading State */}
-      {currentLoading && (
+      {/* Loading State (also shown right when the homepage opens, while the default news loads) */}
+      {showLoading && (
         <div className="flex flex-col items-center justify-center py-20">
           <div className="inline-block w-12 md:w-16 h-12 md:h-16 border-4 border-[#104AC2] border-t-transparent rounded-full animate-spin mb-4"></div>
           <p className="text-gray-600 text-base md:text-lg">Loading news from {activeSource === 'guardian' ? 'Guardian' : 'NewsAPI'}...</p>
@@ -250,7 +310,7 @@ export default function NewsSection() {
       )}
 
       {/* Error State */}
-      {currentError && !currentLoading && hasFetched && (
+      {currentError && !showLoading && hasFetched && (
         <div className="bg-red-50 border border-red-200 rounded-lg p-4 md:p-6 text-center">
           <svg className="w-10 md:w-12 h-10 md:h-12 text-red-500 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -267,21 +327,18 @@ export default function NewsSection() {
       )}
 
       {/* News Grid */}
-      {!currentLoading && !currentError && currentArticles.length > 0 && hasFetched && (
+      {!showLoading && !currentError && currentArticles.length > 0 && hasFetched && (
         <>
           <div className="flex items-center justify-between mb-4">
             <p className="text-xs md:text-sm text-gray-600">
               Showing <span className="font-semibold">{currentArticles.length}</span> articles
             </p>
-            <button
-              onClick={activeSource === 'guardian' ? fetchGuardianNews : fetchNewsAPINews}
-              className="px-3 md:px-4 py-2 text-xs md:text-sm text-[#104AC2] hover:text-[#1C3B7A] hover:bg-blue-50 rounded-lg transition-colors flex items-center gap-2"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-              </svg>
-              Refresh
-            </button>
+            {/* CHANGED: the old "Refresh" button is replaced by this label (the news is cached for 12 hours, so refreshing would return the same data) */}
+            {activeSource === 'guardian' && guardianCachedAt && (
+              <p className="text-xs md:text-sm text-gray-500">
+                News updated {formatUpdated(guardianCachedAt)}
+              </p>
+            )}
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
@@ -289,11 +346,33 @@ export default function NewsSection() {
               <NewsCard key={`${article.url}-${index}`} article={article} />
             ))}
           </div>
+
+          {/* NEW: Load More News (adds 30 more, disabled when there is nothing more to load) */}
+          {activeSource === 'guardian' && (
+            <div className="flex justify-center pt-2">
+              <button
+                onClick={handleLoadMore}
+                disabled={!guardianHasMore || guardianLoadingMore}
+                className="px-6 md:px-8 py-3 bg-gradient-to-r from-[#1C3B7A] to-[#104AC2] text-white rounded-lg hover:from-[#153163] hover:to-[#0d3a9f] disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-md hover:shadow-lg font-semibold text-sm md:text-base flex items-center justify-center gap-3 min-w-[200px]"
+              >
+                {guardianLoadingMore ? (
+                  <>
+                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    Loading more...
+                  </>
+                ) : guardianHasMore ? (
+                  "Load More News"
+                ) : (
+                  "No more news to load"
+                )}
+              </button>
+            </div>
+          )}
         </>
       )}
 
       {/* Empty State */}
-      {!currentLoading && !currentError && currentArticles.length === 0 && hasFetched && (
+      {!showLoading && !currentError && currentArticles.length === 0 && hasFetched && (
         <div className="text-center py-20">
           <svg className="w-12 md:w-16 h-12 md:h-16 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z" />

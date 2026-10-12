@@ -9,8 +9,22 @@ const initialState = {
   
   // Guardian API data
   guardianArticles: [],
-  guardianLoading: false,
+  guardianLoading: false,       // true while the FIRST page of a filter is loading (spinner replaces the grid)
   guardianError: null,
+
+  // NEW: pagination ("Load More News") for the Guardian articles
+  guardianPage: 0,              // last page that was loaded (0 = nothing loaded yet)
+  guardianHasMore: false,       // true when the server says another page exists
+  guardianLoadingMore: false,   // true while "Load More News" is loading (grid stays visible)
+  guardianCachedAt: null,       // when the shown news was fetched from Guardian (for "News updated X ago")
+  guardianTotal: 0,             // total number of matching articles reported by Guardian
+
+  // NEW: the filters that the articles on screen were actually loaded with.
+  // The "Get The News" button is enabled only when the selected filters differ from these.
+  appliedFilters: {
+    time: "24h",
+    topic: "all",
+  },
   
   // 24hrs Bulletin data
   bulletin: {
@@ -25,7 +39,7 @@ const initialState = {
   // Combined view
   combinedArticles: [],
   
-  // Filters
+  // Filters (what the user has currently selected in the filter buttons)
   filters: {
     time: "24h",
     topic: "all",
@@ -104,14 +118,15 @@ export const fetchNewsAPIArticles = createAsyncThunk(
   }
 );
 
-// Async thunk for fetching Guardian articles
+// Async thunk for fetching the FIRST page (30 articles) of Guardian news for a filter
 export const fetchGuardianArticles = createAsyncThunk(
   'news/fetchGuardian',
   async (filters, { rejectWithValue }) => {
     try {
       const params = new URLSearchParams({
         time: filters.time || '24h',
-        topic: filters.topic || 'all'
+        topic: filters.topic || 'all',
+        page: '1' // CHANGED: always the first page, "Load More" handles the following pages
       });
       
       const response = await fetch(`/api/guardian?${params.toString()}`);
@@ -123,8 +138,45 @@ export const fetchGuardianArticles = createAsyncThunk(
       
       return data;
     } catch (error) {
-      return rejectWithValue({ error: error.message });
+      return rejectWithValue({ error: error.message, message: error.message });
     }
+  },
+  {
+    // NEW: ignore the request if a first-page load is already running (stops double requests, e.g. React dev double-mount)
+    condition: (_, { getState }) => !getState().news.guardianLoading,
+  }
+);
+
+// NEW: loads the NEXT 30 articles for the filters currently shown and adds them below the existing ones
+export const loadMoreGuardianArticles = createAsyncThunk(
+  'news/loadMoreGuardian',
+  async (_, { getState, rejectWithValue }) => {
+    const { appliedFilters, guardianPage } = getState().news; // always continue the filters that are on screen
+    try {
+      const params = new URLSearchParams({
+        time: appliedFilters.time,
+        topic: appliedFilters.topic,
+        page: String(guardianPage + 1) // next page
+      });
+
+      const response = await fetch(`/api/guardian?${params.toString()}`);
+      const data = await response.json();
+
+      if (!response.ok) {
+        return rejectWithValue(data);
+      }
+
+      return data;
+    } catch (error) {
+      return rejectWithValue({ error: error.message, message: error.message });
+    }
+  },
+  {
+    // NEW: only run when more news exists and nothing else is loading
+    condition: (_, { getState }) => {
+      const s = getState().news;
+      return s.guardianHasMore && !s.guardianLoading && !s.guardianLoadingMore;
+    },
   }
 );
 
@@ -176,6 +228,12 @@ const newsSlice = createSlice({
       state.guardianError = null;
       state.lastFetched = null;
       state.guardianLastFetched = null;
+      // NEW: also reset the pagination data
+      state.guardianPage = 0;
+      state.guardianHasMore = false;
+      state.guardianLoadingMore = false;
+      state.guardianCachedAt = null;
+      state.guardianTotal = 0;
     },
     clearBulletin: (state) => {
       state.bulletin = {
@@ -207,7 +265,7 @@ const newsSlice = createSlice({
         state.error = action.payload?.message || 'Failed to fetch NewsAPI articles';
       });
     
-    // Guardian reducers
+    // Guardian reducers (first page of a filter)
     builder
       .addCase(fetchGuardianArticles.pending, (state) => {
         state.guardianLoading = true;
@@ -218,10 +276,45 @@ const newsSlice = createSlice({
         state.guardianArticles = action.payload.articles || [];
         state.guardianLastFetched = new Date().toISOString();
         state.guardianError = null;
+        // NEW: pagination info + remember which filters these articles belong to
+        state.guardianPage = action.payload.page || 1;
+        state.guardianHasMore = !!action.payload.hasMore;
+        state.guardianTotal = action.payload.total || 0;
+        state.guardianCachedAt = action.payload.cachedAt || null;
+        state.appliedFilters = {
+          time: action.payload.filters?.time || action.meta.arg?.time || "24h",
+          topic: action.payload.filters?.topic || action.meta.arg?.topic || "all",
+        };
       })
       .addCase(fetchGuardianArticles.rejected, (state, action) => {
         state.guardianLoading = false;
         state.guardianError = action.payload?.message || 'Failed to fetch Guardian articles';
+      });
+
+    // NEW: Guardian "Load More News" reducers (adds the next page below the current articles)
+    builder
+      .addCase(loadMoreGuardianArticles.pending, (state) => {
+        state.guardianLoadingMore = true;
+      })
+      .addCase(loadMoreGuardianArticles.fulfilled, (state, action) => {
+        state.guardianLoadingMore = false;
+
+        const { articles = [], page, hasMore, filters } = action.payload;
+
+        // Ignore a late answer that belongs to older filters or an older page (user changed filters meanwhile)
+        if (filters?.time !== state.appliedFilters.time || filters?.topic !== state.appliedFilters.topic) return;
+        if (page !== state.guardianPage + 1) return;
+
+        // Pages are cached at different moments, so skip any article that is already on screen
+        const existingUrls = new Set(state.guardianArticles.map((a) => a.url));
+        const newArticles = articles.filter((a) => !existingUrls.has(a.url));
+
+        state.guardianArticles.push(...newArticles);
+        state.guardianPage = page;
+        state.guardianHasMore = !!hasMore;
+      })
+      .addCase(loadMoreGuardianArticles.rejected, (state) => {
+        state.guardianLoadingMore = false; // the component shows an error toast, existing articles stay visible
       });
     
     // 24hrs Bulletin reducers
