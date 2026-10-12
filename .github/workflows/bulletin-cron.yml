@@ -10,15 +10,15 @@ jobs:
   generate-bulletin:
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    
+
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5 # upgraded from v4 (runs on Node 24, removes the warning)
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5 # upgraded from v4 (runs on Node 24, removes the warning)
         with:
-          node-version: '20'
+          node-version: '24' # Node version used to run your script (current LTS)
           cache: 'npm'
 
       - name: Install dependencies
@@ -29,4 +29,4 @@ jobs:
           MONGODB_URI: ${{ secrets.MONGODB_URI }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GUARDIAN_API_KEY: ${{ secrets.GUARDIAN_API_KEY }}
-        run: node --experimental-specifier-resolution=node .github/scripts/generate-bulletin.mjs
+        run: node .github/scripts/generate-bulletin.mjs # removed the old experimental flag, it is not needed
