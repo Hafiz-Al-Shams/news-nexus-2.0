@@ -2,19 +2,29 @@ name: Send Daily Newsletter
 
 on:
   schedule:
-    # Every day at 01:00 UTC. The script schedules the email for 01:30 UTC = 7:30 AM Dhaka,
-    # so Kit still sends on time even if GitHub starts this job up to ~30 minutes late.
+    # Main run: 01:00 UTC. The script schedules the email for 01:30 UTC = 7:30 AM Dhaka.
     - cron: '0 1 * * *'
+    # BACKUP runs: if an earlier run failed, one of these tries again.
+    # If the email was already created, the script sees the log record and exits without sending a duplicate.
+    - cron: '20 1 * * *'
+    - cron: '40 1 * * *'
+    - cron: '30 2 * * *'
+    - cron: '0 4 * * *'  # last chance, would send around 10 AM Dhaka time
   workflow_dispatch: # Manual trigger for testing
     inputs:
       force:
-        description: 'Ignore the 20-hour duplicate protection (use for testing)'
+        description: 'Ignore the 18-hour duplicate protection (use for testing)'
         type: boolean
         default: false
       draft_only:
         description: 'Only create a DRAFT in Kit, do not send (safe for testing)'
         type: boolean
         default: true
+
+# Never let two newsletter runs overlap (a second run waits for the first to finish)
+concurrency:
+  group: send-newsletter
+  cancel-in-progress: false
 
 jobs:
   send-newsletter:
@@ -23,12 +33,12 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5 # upgraded from v4 (runs on Node 24, removes the warning)
+        uses: actions/checkout@v5
 
       - name: Setup Node.js
-        uses: actions/setup-node@v5 # upgraded from v4 (runs on Node 24, removes the warning)
+        uses: actions/setup-node@v5
         with:
-          node-version: '24' # Node version used to run your script (current LTS)
+          node-version: '24'
           cache: 'npm'
 
       - name: Install dependencies
