@@ -1,8 +1,15 @@
 @import "tailwindcss";
 
+/* NEW: lets you also write dark:bg-... style classes in future components (keyed to the "dark" class on <html>) */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ===== LIGHT MODE (unchanged colors) ===== */
 :root {
   --background: #ffffff;
   --foreground: #171717;
+  /* NEW: toast colors (same as react-hot-toast's own defaults, so light mode looks identical) */
+  --toast-bg: #ffffff;
+  --toast-text: #363636;
 }
 
 @theme inline {
@@ -12,15 +19,89 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* CHANGED: the old "prefers-color-scheme: dark" block was removed.
+   The theme is now controlled ONLY by the toggle (default = light), so light mode always looks the same. */
+
+/* ===== DARK MODE ===== */
+.dark {
+  color-scheme: dark; /* dark scrollbars, dark default textareas / inputs */
+  --background: #0f1626; /* page background behind everything */
+  --foreground: #e3e8f0; /* default text color */
+  --toast-bg: #1c2740;
+  --toast-text: #e3e8f0;
+
+  /* Gray scale flipped: light grays become deep navy, dark grays become soft light text.
+     Every existing class (bg-gray-50, text-gray-800, border-gray-200, hover:bg-gray-100 ...) follows automatically. */
+  --color-gray-50: #0f1626;  /* page backgrounds, inputs */
+  --color-gray-100: #1c2740; /* chips, hover backgrounds */
+  --color-gray-200: #2a3650; /* borders, dividers, image placeholders */
+  --color-gray-300: #3b4863;
+  --color-gray-400: #6b7a93;
+  --color-gray-500: #94a1b8;
+  --color-gray-600: #aab5c8;
+  --color-gray-700: #c9d2e0;
+  --color-gray-800: #e3e8f0;
+  --color-gray-900: #f3f5f9; /* headings */
+
+  /* Tinted backgrounds / borders (error boxes, badges, warnings) made dark and soft */
+  --color-blue-50: #0f1b33;
+  --color-blue-200: #1e3a6e;
+  --color-red-50: #2a1418;
+  --color-red-100: #3b1a20;
+  --color-red-200: #5c2229;
+  --color-green-100: #10291d;
+  --color-yellow-50: #2b2410;
+  --color-yellow-100: #3a2f0f;
+  --color-yellow-200: #5a4a14;
+  --color-purple-50: #1d1630;
+  --color-purple-100: #2a1f47;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+  transition: background-color 0.2s ease, color 0.2s ease; /* smooth switch between themes */
 }
+
+/* ===== DARK MODE: special cases that a plain color remap cannot handle ===== */
+
+/* White cards / sidebars / modals (text-white on buttons is NOT affected, only the bg-white class) */
+.dark .bg-white { background-color: #151e30; }
+.dark .via-white { --tw-gradient-via: #151e30; }   /* chat page gradient */
+.dark .to-white { --tw-gradient-to: #151e30; }     /* review card gradient */
+
+/* bg-gray-900 is used as a dark tooltip / active admin tab (keeps white text readable) ... */
+.dark .bg-gray-900 { background-color: #2a3650; }
+.dark .border-t-gray-900 { border-top-color: #2a3650; } /* tooltip arrow */
+/* ... except the round black bullet dots in the bulletin list, which must turn light */
+.dark .bg-gray-900.rounded-full { background-color: #e3e8f0; }
+
+/* Brand blue text becomes lighter so it stays readable on dark backgrounds */
+.dark .text-\[\#104AC2\] { color: #7aa7ff; }
+.dark .text-\[\#1C3B7A\] { color: #8fb3ff; }
+.dark .hover\:text-\[\#1C3B7A\]:hover { color: #a9c6ff; }
+.dark .hover\:text-blue-600:hover { color: #7aa7ff; }
+
+/* Colored text on tinted badges / error boxes (backgrounds were darkened above, so text is lightened) */
+.dark .text-red-600,
+.dark .text-red-700,
+.dark .text-red-800 { color: #fca5a5; }
+.dark .hover\:text-red-700:hover { color: #fecaca; }
+.dark .text-green-700 { color: #86efac; }
+.dark .text-yellow-700,
+.dark .text-yellow-800 { color: #fde047; }
+.dark .text-purple-700 { color: #d8b4fe; }
+
+/* Slightly dim photos so bright news images are not harsh on dark backgrounds */
+.dark img { filter: brightness(0.92); }
+
+/* SweetAlert2 popups (development alert + registration success) */
+.dark .swal2-popup {
+  background: #151e30;
+  color: #e3e8f0;
+}
+.dark .swal2-title,
+.dark .swal2-html-container { color: #e3e8f0; }
+.dark .swal2-icon.swal2-success [class^="swal2-success-circular-line"],
+.dark .swal2-icon.swal2-success .swal2-success-fix { background: #151e30; } /* removes white patches in the success icon */
