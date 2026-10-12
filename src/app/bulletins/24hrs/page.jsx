@@ -7,6 +7,7 @@ import { useSession } from "next-auth/react";
 import { fetch24hrsBulletin, expandBulletinDetails } from "@/store/slices/newsSlice";
 import toast from "react-hot-toast";
 import Link from "next/link";
+import SpeakButton from "@/components/SpeakButton"; // NEW: text to speech button
 
 export default function Bulletin24HrsPage() {
     const router = useRouter();
@@ -39,7 +40,7 @@ export default function Bulletin24HrsPage() {
     };
 
     const handleBackToBullets = () => {
-        setShowDetails(false);
+        setShowDetails(false); // the detailed view (and its Listen button) unmounts, so the voice stops automatically
     };
 
     const handleReviewSubmit = async () => {
@@ -221,15 +222,23 @@ export default function Bulletin24HrsPage() {
                         {!showDetails && (
                             <div className="max-w-4xl mx-auto space-y-6">
                                 <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 sm:p-8">
-                                    {/* Title */}
-                                    <h3 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2">
-                                        Quick Summary
-                                    </h3>
+                                    {/* NEW: title block and the Listen button share one row (button wraps below the title on small screens) */}
+                                    <div className="flex flex-wrap items-start justify-between gap-3">
+                                        <div>
+                                            {/* Title */}
+                                            <h3 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2">
+                                                Quick Summary
+                                            </h3>
 
-                                    {/* Subtitle */}
-                                    <p className="text-sm sm:text-base text-gray-600 mb-2">
-                                        AI Prioritized Top News Today
-                                    </p>
+                                            {/* Subtitle */}
+                                            <p className="text-sm sm:text-base text-gray-600 mb-2">
+                                                AI Prioritized Top News Today
+                                            </p>
+                                        </div>
+
+                                        {/* NEW: reads all 12 bullets aloud, one after another */}
+                                        <SpeakButton text={bulletin.bullets} label="Listen to Bulletin" />
+                                    </div>
 
                                     {/* Timestamp */}
                                     {bulletin.cachedAt && (
@@ -298,15 +307,24 @@ export default function Bulletin24HrsPage() {
                                 <div className="max-w-6xl mx-auto">
                                     <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
                                         <h3 className="text-2xl sm:text-3xl font-bold text-gray-900">Detailed Stories</h3>
-                                        <button
-                                            onClick={handleBackToBullets}
-                                            className="px-4 py-2 text-[#104AC2] hover:text-[#1C3B7A] hover:bg-blue-50 rounded-lg transition-colors flex items-center gap-2 text-sm sm:text-base font-medium"
-                                        >
-                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-                                            </svg>
-                                            Back to Bulletins
-                                        </button>
+
+                                        {/* CHANGED: Listen button and Back button sit together on the right */}
+                                        <div className="flex flex-wrap items-center gap-3">
+                                            {/* NEW: reads every card (title, then description) one after another */}
+                                            <SpeakButton
+                                                text={bulletin.detailedCards.flatMap((card) => [card.title, card.description])}
+                                                label="Listen to Details"
+                                            />
+                                            <button
+                                                onClick={handleBackToBullets}
+                                                className="px-4 py-2 text-[#104AC2] hover:text-[#1C3B7A] hover:bg-blue-50 rounded-lg transition-colors flex items-center gap-2 text-sm sm:text-base font-medium"
+                                            >
+                                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                                                </svg>
+                                                Back to Bulletins
+                                            </button>
+                                        </div>
                                     </div>
 
                                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
