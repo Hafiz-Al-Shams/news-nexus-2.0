@@ -165,6 +165,8 @@ async function main() {
   const subject = `NewsNexus Daily Bulletin - ${dateText}`;
 
   // 5) Create the broadcast in Kit (draft when send_at is null, scheduled otherwise)
+  // FIXED: no subscriber_filter on purpose. Kit only accepts "segment" or "tag" filters,
+  // and when no filter is given the broadcast goes to ALL subscribers.
   const result = await kitRequest("POST", "/broadcasts", {
     subject,
     preview_text: "Today's 12 most important world stories, summarized by AI.", // text shown next to the subject in inboxes
@@ -172,7 +174,6 @@ async function main() {
     content: buildEmailHtml(bullets, dateText),
     public: false, // do not publish the email on the web
     send_at: isDraft ? null : sendAt.toISOString(), // scheduled send time (ISO 8601, UTC)
-    subscriber_filter: [{ all: [{ type: "all_subscribers" }] }], // send to every subscriber
   });
 
   if (!result.ok) {
