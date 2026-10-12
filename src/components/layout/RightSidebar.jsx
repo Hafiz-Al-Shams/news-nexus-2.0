@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link"; // NEW: used for the newsletter link at the bottom
 
 export default function RightSidebar() {
   const [searchQuery, setSearchQuery] = useState("");
@@ -106,9 +107,13 @@ export default function RightSidebar() {
 
       {/* Newsletter Subscribe Button */}
       <div className="border-t border-gray-200 p-6">
-        <button className="w-full px-6 py-3 bg-[#666666] text-white rounded-lg hover:bg-[#555555] transition-colors font-semibold text-sm shadow-md hover:shadow-lg">
+        {/* CHANGED: was a dead <button>, now a link to the newsletter page */}
+        <Link
+          href="/newsletter"
+          className="block w-full px-6 py-3 bg-[#666666] text-white rounded-lg hover:bg-[#555555] transition-colors font-semibold text-sm text-center shadow-md hover:shadow-lg"
+        >
           Subscribe to Our Newsletter
-        </button>
+        </Link>
         <p className="text-xs text-gray-500 text-center mt-2">
           Get daily news updates in your inbox
         </p>

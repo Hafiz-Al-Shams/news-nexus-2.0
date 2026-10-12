@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { useRouter } from "next/navigation";
+import Link from "next/link"; // NEW: used for the tablet "Subscribe Newsletter" link
 import {
   fetchNewsAPIArticles,
   fetchGuardianArticles,
@@ -159,9 +160,13 @@ export default function NewsSection() {
 
         {/* Medium/Tablet: Newsletter Button (Right) */}
         <div className="hidden md:block lg:hidden md:w-auto">
-          <button className="px-4 py-2 bg-[#666666] text-white rounded-lg hover:bg-[#555555] transition-colors font-semibold text-sm shadow-md hover:shadow-lg whitespace-nowrap">
+          {/* CHANGED: was a dead <button>, now a link to the newsletter page */}
+          <Link
+            href="/newsletter"
+            className="inline-block px-4 py-2 bg-[#666666] text-white rounded-lg hover:bg-[#555555] transition-colors font-semibold text-sm shadow-md hover:shadow-lg whitespace-nowrap"
+          >
             Subscribe Newsletter
-          </button>
+          </Link>
         </div>
       </div>
 

@@ -1,0 +1,43 @@
+name: Send Daily Newsletter
+
+on:
+  schedule:
+    # Every day at 01:00 UTC. The script schedules the email for 01:30 UTC = 7:30 AM Dhaka,
+    # so Kit still sends on time even if GitHub starts this job up to ~30 minutes late.
+    - cron: '0 1 * * *'
+  workflow_dispatch: # Manual trigger for testing
+    inputs:
+      force:
+        description: 'Ignore the 20-hour duplicate protection (use for testing)'
+        type: boolean
+        default: false
+      draft_only:
+        description: 'Only create a DRAFT in Kit, do not send (safe for testing)'
+        type: boolean
+        default: true
+
+jobs:
+  send-newsletter:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Create Kit broadcast
+        env:
+          MONGODB_URI: ${{ secrets.MONGODB_URI }}   # reads the latest bulletin
+          KIT_API_KEY: ${{ secrets.KIT_API_KEY }}   # creates the broadcast in Kit
+          FORCE_SEND: ${{ inputs.force }}           # empty on scheduled runs
+          DRAFT_ONLY: ${{ inputs.draft_only }}      # empty on scheduled runs, so the real send happens
+        run: node .github/scripts/send-newsletter.mjs

@@ -32,8 +32,7 @@ export default function LeftSidebar({ isDrawerMode = false, onLinkClick }) {
     }
   };
 
-  // CHANGED: the bulletin is public now, so everyone goes straight to it
-  // (before, logged-out visitors were redirected to the login page)
+  // The bulletin is public, so everyone goes straight to it
   const handleBulletinClick = () => {
     router.push("/bulletins/24hrs");
     if (onLinkClick) onLinkClick();
@@ -109,9 +108,14 @@ export default function LeftSidebar({ isDrawerMode = false, onLinkClick }) {
         <>
           <div className="border-t border-gray-200"></div>
           <div className="px-4 py-4">
-            <button className="w-full px-6 py-3 bg-[#666666] text-white rounded-lg hover:bg-[#555555] transition-colors font-semibold text-sm shadow-md hover:shadow-lg">
+            {/* CHANGED: was a dead <button>, now a link to the newsletter page (closes the drawer on click) */}
+            <Link
+              href="/newsletter"
+              onClick={handleAssistantClick}
+              className="block w-full px-6 py-3 bg-[#666666] text-white rounded-lg hover:bg-[#555555] transition-colors font-semibold text-sm text-center shadow-md hover:shadow-lg"
+            >
               Subscribe to Our Newsletter
-            </button>
+            </Link>
             <p className="text-xs text-gray-500 text-center mt-2">
               Get daily news updates
             </p>
