@@ -51,10 +51,6 @@ export default function Home() {
     setIsUserModalOpen(false);
   };
 
-  // REMOVED: the full-screen "Loading..." block (if status === "loading").
-  // The news is public, so the page now renders immediately and the news starts loading
-  // at the same time as the login check, instead of waiting for it.
-
   return (
     // Plain <div> wrapper (not a fragment) so Next.js scroll check doesn't hit the sticky MobileHeader
     <div>
@@ -77,41 +73,16 @@ export default function Home() {
         leftSidebar={<LeftSidebar />}
         mainContent={
           <MainContent>
-            {/* Banner for logged-out visitors, explains that AI features need a login.
-                Uses session status (not Redux) so it never flashes for logged-in users. */}
-            {status === "unauthenticated" && (
-              <div className="mb-6 bg-gradient-to-r from-[#1C3B7A] to-[#104AC2] text-white rounded-xl p-4 md:p-5 shadow-md flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                <div>
-                  <p className="font-semibold text-base md:text-lg">Sign in to unlock AI features</p>
-                  <p className="text-sm text-blue-100">
-                    You can read the news and the AI bulletin for free. Log in to summarize articles with AI and chat with the AI assistant.
-                  </p>
-                </div>
-                <div className="flex gap-3 flex-shrink-0">
-                  <Link
-                    href="/login"
-                    className="px-5 py-2 bg-white text-[#104AC2] rounded-lg font-semibold text-sm hover:bg-blue-50 transition-colors"
-                  >
-                    Login
-                  </Link>
-                  <Link
-                    href="/signup"
-                    className="px-5 py-2 border border-white text-white rounded-lg font-semibold text-sm hover:bg-white/10 transition-colors"
-                  >
-                    Sign Up
-                  </Link>
-                </div>
-              </div>
-            )}
-
-            {/* The news section is shown to EVERYONE (logged in or not) */}
+            {/* REMOVED: the "Sign in to unlock AI features" banner (with its Login / Sign Up buttons).
+                The middle column is now identical for logged-in and logged-out visitors;
+                the Sign In button in the left sidebar is the only entry point. */}
             <NewsSection />
           </MainContent>
         }
         rightSidebar={<RightSidebar />}
       />
 
-      {/* Floating AI Chat Button */}
+      {/* Floating AI Chat Button (position unchanged) */}
       <Link
         href="/chat-with-ai"
         className="fixed bottom-6 md:bottom-10 lg:bottom-24 right-4 md:right-6 z-50 group"

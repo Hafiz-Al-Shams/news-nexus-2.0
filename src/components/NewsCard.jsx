@@ -1,9 +1,10 @@
+// src>components>NewsCard.jsx  (MODIFIED)
 "use client";
 
 import { useState } from "react";
-import { useSession } from "next-auth/react"; // NEW: to know if the visitor is logged in
-import { useRouter } from "next/navigation"; // NEW: to send logged-out visitors to the login page
-import toast from "react-hot-toast"; // NEW: to show the "please login" message
+import { useSession } from "next-auth/react"; // to know if the visitor is logged in
+import { useRouter } from "next/navigation"; // to send logged-out visitors to the login page
+import toast from "react-hot-toast"; // to show the "please login" message
 import SummaryModal from "./SummaryModal";
 
 export default function NewsCard({ article }) {
@@ -23,11 +24,12 @@ export default function NewsCard({ article }) {
     return date.toLocaleDateString();
   };
 
+  // Behavior is unchanged: AI summaries still need a login. Only the button LABEL is now the same for everyone.
   const handleSummarizeClick = (e) => {
     e.preventDefault();
     e.stopPropagation();
 
-    // NEW: AI summaries need a login, so logged-out visitors are sent to the login page
+    // Logged-out visitors are still sent to the login page when they click
     if (status === "unauthenticated") {
       toast.error("Please login to use AI summaries");
       router.push("/login");
@@ -42,14 +44,14 @@ export default function NewsCard({ article }) {
 
   return (
     <>
-      <div className="group block bg-white rounded-lg shadow-sm hover:shadow-lg transition-all duration-300 overflow-hidden border border-gray-200 hover:border-[#104AC2]">
+      <div className="group flex flex-col bg-white rounded-xl shadow-sm hover:shadow-xl hover:-translate-y-0.5 transition-all duration-300 overflow-hidden border border-gray-200 hover:border-[#104AC2]">
         {/* Image */}
         <div className="relative h-48 overflow-hidden bg-gray-200">
           {article.urlToImage && !imageError ? (
             <img
               src={article.urlToImage}
               alt={article.title}
-              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
               onError={() => setImageError(true)}
             />
           ) : (
@@ -72,16 +74,16 @@ export default function NewsCard({ article }) {
 
           {/* Source Badge */}
           {article.source?.name && (
-            <div className="absolute top-2 right-2 px-2 py-1 bg-black/60 backdrop-blur-sm rounded text-xs text-white">
+            <div className="absolute top-2 right-2 px-2.5 py-1 bg-black/60 backdrop-blur-sm rounded-full text-xs text-white">
               {article.source.name}
             </div>
           )}
         </div>
 
-        {/* Content */}
-        <div className="p-4">
+        {/* Content (flex-1 so the buttons of all cards in a row line up at the bottom) */}
+        <div className="flex flex-col flex-1 p-4">
           {/* Title */}
-          <h3 className="font-semibold text-gray-800 mb-2 line-clamp-2">
+          <h3 className="font-semibold text-gray-800 mb-2 line-clamp-2 leading-snug">
             {article.title}
           </h3>
 
@@ -92,30 +94,40 @@ export default function NewsCard({ article }) {
             </p>
           )}
 
-          {/* Footer */}
-          <div className="flex items-center justify-between text-xs text-gray-500 mb-3">
+          {/* Footer: time + author */}
+          <div className="flex items-center justify-between text-xs text-gray-500 mb-4 mt-auto">
             <span>{formatDate(article.publishedAt)}</span>
             {article.author && (
               <span className="truncate ml-2">By {article.author}</span>
             )}
           </div>
 
-          {/* Action Buttons */}
-          <div className="flex gap-2">
+          {/* Action Buttons: one outline button + one filled button; wraps on very narrow cards */}
+          <div className="flex flex-wrap gap-2">
             <a
               href={article.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex-1 px-4 py-2 bg-gradient-to-r from-[#1C3B7A] to-[#104AC2] text-white text-sm font-medium rounded-lg hover:from-[#153163] hover:to-[#0d3a9f] transition-colors text-center"
+              className="flex-1 min-w-[110px] px-3 py-2 bg-white text-[#104AC2] border border-[#104AC2] text-sm font-medium rounded-lg hover:bg-blue-50 transition-colors text-center"
             >
               View Original
             </a>
             <button
+              type="button"
               onClick={handleSummarizeClick}
-              className="flex-1 px-4 py-2 bg-gradient-to-r from-[#104AC2] to-[#1C3B7A] text-white text-sm font-medium rounded-lg hover:from-[#0d3a9f] hover:to-[#153163] transition-all text-center"
+              className="flex-1 min-w-fit px-3 py-2 bg-gradient-to-r from-[#1C3B7A] to-[#104AC2] text-white text-sm font-medium leading-none whitespace-nowrap rounded-lg hover:from-[#153163] hover:to-[#0d3a9f] shadow-sm hover:shadow-md transition-all inline-flex items-center justify-center gap-1.5"
             >
-              {/* NEW: label tells logged-out visitors that a login is required */}
-              {status === "unauthenticated" ? "Login to Summarize" : "Summarize with AI"}
+              {/* Sparkle icon marks this as the AI action */}
+              <svg
+                className="w-4 h-4 shrink-0"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+                aria-hidden="true"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
+              <span>Summarize with AI</span>
             </button>
           </div>
         </div>

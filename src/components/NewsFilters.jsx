@@ -1,5 +1,8 @@
+// src>components>NewsFilters.jsx  (MODIFIED)
 "use client";
 
+// Compact filter controls (time range + category).
+// The outer card and the "Filter News" heading now live in NewsFilterPanel, so this file only draws the controls.
 export default function NewsFilters({
   currentTime,
   currentTopic,
@@ -27,24 +30,26 @@ export default function NewsFilters({
     { value: "travel", label: "Travel" },
   ];
 
-  return (
-    <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-6">
-      <h2 className="text-lg font-semibold text-gray-800 mb-4">Filter News</h2>
+  // Shared look for the selected / unselected state (brand gradient stays the same as before)
+  const activeClass = "bg-gradient-to-r from-[#1C3B7A] to-[#104AC2] text-white shadow-sm";
+  const idleClass = "bg-gray-100 text-gray-700 hover:bg-gray-200";
 
-      {/* Time Filter */}
-      <div className="mb-4">
-        <label className="block text-sm font-medium text-gray-700 mb-2">
+  return (
+    <div className="space-y-4">
+      {/* Time Filter: 2x2 grid of small buttons */}
+      <div>
+        <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-2">
           Time Range
-        </label>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+        </p>
+        <div className="grid grid-cols-2 gap-1.5">
           {times.map((t) => (
             <button
               key={t.value}
+              type="button"
               onClick={() => onTimeChange(t.value)}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                currentTime === t.value
-                  ? "bg-gradient-to-r from-[#1C3B7A] to-[#104AC2] text-white shadow-md"
-                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+              aria-pressed={currentTime === t.value} // screen readers know which one is selected
+              className={`px-3 py-2 rounded-lg text-xs font-medium transition-all ${
+                currentTime === t.value ? activeClass : idleClass
               }`}
             >
               {t.label}
@@ -53,20 +58,20 @@ export default function NewsFilters({
         </div>
       </div>
 
-      {/* Topic Filter */}
+      {/* Topic Filter: wrapping pill chips (takes much less space than the old big grid) */}
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
+        <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-2">
           Category
-        </label>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+        </p>
+        <div className="flex flex-wrap gap-1.5">
           {topics.map((topic) => (
             <button
               key={topic.value}
+              type="button"
               onClick={() => onTopicChange(topic.value)}
-              className={`px-3 py-2 rounded-lg text-sm font-medium transition-all ${
-                currentTopic === topic.value
-                  ? "bg-gradient-to-r from-[#1C3B7A] to-[#104AC2] text-white shadow-md"
-                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+              aria-pressed={currentTopic === topic.value}
+              className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                currentTopic === topic.value ? activeClass : idleClass
               }`}
             >
               {topic.label}
