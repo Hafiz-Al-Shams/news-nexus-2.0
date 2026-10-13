@@ -1,8 +1,9 @@
 // .github/scripts/send-newsletter.mjs
-// Daily job: reads the newest bulletin from MongoDB, builds an HTML email with the 12 bullets,
-// and creates ONE Kit broadcast scheduled for 7:30 AM Dhaka time (01:30 UTC) to all subscribers.
-// The workflow runs this script several times a day (main + backups); the duplicate check below
-// makes sure only ONE broadcast is created per day.
+// Job: reads the newest bulletin from MongoDB, builds an HTML email with the 12 bullets,
+// and creates ONE Kit broadcast that is sent about 2 minutes after the run starts.
+// The workflow runs this script every 2 hours at odd Dhaka hours (12 times per day) because GitHub does not
+// guarantee when (or even if) a scheduled run starts. The "one broadcast per day" check below makes sure that
+// the FIRST successful run of the day creates the broadcast and all other runs of the same day do nothing.
 import mongoose from "mongoose";
 
 const {
@@ -15,11 +16,10 @@ const {
 const KIT_BASE_URL = "https://api.kit.com/v4";
 const SITE_URL = "https://news-nexus-2.vercel.app/"; // link shown in the email, change if your domain changes
 const MAX_BULLETIN_AGE_MS = 24 * 60 * 60 * 1000; // news may be up to 24 hours old (your project rule)
-const MIN_GAP_MS = 18 * 60 * 60 * 1000;          // CHANGED 20h -> 18h: never create two broadcasts within 18 hours (leaves room for late backup runs)
-const SEND_HOUR_UTC = 1;                         // 01:30 UTC = 7:30 AM in Dhaka (UTC+6)
-const SEND_MINUTE_UTC = 30;
-const LATE_SEND_DELAY_MS = 2 * 60 * 1000;        // if the run starts after 01:30 UTC, send 2 minutes from now
+const SEND_DELAY_MS = 2 * 60 * 1000;             // CHANGED: no fixed send time any more, the email is sent 2 minutes after the run starts
 const MAX_RETRIES = 4;                           // retries for rate limits / temporary server errors
+
+// The rule is "one broadcast per UTC day" (a day starts at 00:00 UTC = 6:00 AM Dhaka), see step 1 in main().
 
 // Stop immediately if a required secret is missing
 const missing = Object.entries({ MONGODB_URI, KIT_API_KEY })
@@ -113,18 +113,9 @@ function buildEmailHtml(bullets, dateText) {
 </div>`.trim();
 }
 
-// Works out when Kit should send the broadcast: the next 01:30 UTC (7:30 AM Dhaka), or "very soon" if that time already passed
+// CHANGED: the send time is simply "2 minutes from now". Whichever run succeeds first decides the send time.
 function getSendTime() {
-  const now = new Date();
-  const target = new Date(
-    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), SEND_HOUR_UTC, SEND_MINUTE_UTC, 0)
-  );
-
-  // Normal case: the run started on time, so 01:30 UTC today is still in the future
-  if (target.getTime() > now.getTime() + 60 * 1000) return target;
-
-  // Late run (or backup run / manual run): send 2 minutes from now instead of using a past time
-  return new Date(now.getTime() + LATE_SEND_DELAY_MS);
+  return new Date(Date.now() + SEND_DELAY_MS);
 }
 
 async function main() {
@@ -133,13 +124,28 @@ async function main() {
 
   const isDraft = DRAFT_ONLY === "true";
 
-  // 1) Duplicate protection FIRST (so backup runs exit quickly): skip if a broadcast was already created in the last 18 hours
+  // 1) Duplicate protection FIRST (so the 11 extra runs exit within seconds):
+  // Only ONE broadcast per UTC day. A day starts at 00:00 UTC (= 6:00 AM Dhaka) and ends at 23:59 UTC,
+  // which matches the 12 workflow runs (01:00, 03:00 ... 23:00 UTC = 7:00 AM, 9:00 AM ... 5:00 AM Dhaka). The next day always starts fresh.
   if (FORCE_SEND !== "true" && !isDraft) {
-    const lastLog = await NewsletterLog.findOne({ type: "daily-broadcast" }).sort({ createdAt: -1 }).lean();
-    if (lastLog && Date.now() - new Date(lastLog.createdAt).getTime() < MIN_GAP_MS) {
-      console.log(`Today's broadcast already exists (created ${new Date(lastLog.createdAt).toISOString()}). Nothing to do.`);
+    const now = new Date();
+    const startOfTodayUtc = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0) // today 00:00 UTC
+    );
+
+    // Is there already a broadcast record created since today's 00:00 UTC?
+    const todaysLog = await NewsletterLog.findOne({
+      type: "daily-broadcast",
+      createdAt: { $gte: startOfTodayUtc },
+    }).lean();
+
+    if (todaysLog) {
+      console.log(
+        `Today's broadcast was already created at ${new Date(todaysLog.createdAt).toISOString()} ` +
+        `(Kit broadcast id: ${todaysLog.kitBroadcastId}). Nothing to do.`
+      );
       await mongoose.disconnect();
-      process.exit(0); // green run, this is the normal result for backup runs
+      process.exit(0); // green run, this is the normal result for the extra runs of the day
     }
   }
 
@@ -160,7 +166,7 @@ async function main() {
   console.log(`Using bulletin generated ${(ageMs / 3600000).toFixed(1)}h ago`);
 
   // 4) Build the email
-  const sendAt = getSendTime();
+  const sendAt = getSendTime(); // 2 minutes from now
   const dateText = sendAt.toLocaleDateString("en-US", {
     day: "numeric", month: "long", year: "numeric", timeZone: "Asia/Dhaka", // date as seen in Dhaka
   });
@@ -179,6 +185,7 @@ async function main() {
   });
 
   if (!result.ok) {
+    // No log is written on failure, so the next run (2 hours later) will try again
     throw new Error(`Kit rejected the broadcast: ${result.status} ${JSON.stringify(result.data)}`);
   }
 
@@ -189,11 +196,11 @@ async function main() {
       : `Broadcast ${broadcastId} scheduled for ${sendAt.toISOString()} (Dhaka: ${sendAt.toLocaleTimeString("en-US", { timeZone: "Asia/Dhaka" })})`
   );
 
-  // 6) Remember this broadcast so the backup runs know the job is done for today
+  // 6) Remember this broadcast so the other runs of the day know the job is done (drafts are never logged)
   if (!isDraft) {
     await NewsletterLog.create({
       type: "daily-broadcast",
-      createdAt: new Date(),
+      createdAt: new Date(), // the duplicate check in step 1 looks at this time
       scheduledFor: sendAt,
       kitBroadcastId: broadcastId,
       bulletinId: bulletin._id,
@@ -207,5 +214,5 @@ async function main() {
 main().catch(async (error) => {
   console.error("Newsletter job failed:", error.message);
   await mongoose.disconnect();
-  process.exit(1); // red run in GitHub so you notice (the next backup run will try again)
+  process.exit(1); // red run in GitHub so you notice (the next run, 2 hours later, will try again)
 });
