@@ -4,11 +4,28 @@
 import { useSession, signOut } from "next-auth/react";
 import { useDispatch } from "react-redux";
 import { logout as reduxLogout } from "@/store/slices/userSlice";
-import { openChat } from "@/store/slices/uiSlice"; // NEW: opens the chat modal
+import { openChat } from "@/store/slices/uiSlice"; // opens the chat modal
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useState } from "react";
 import toast from "react-hot-toast";
+
+// NEW: the pages the bottom links open (same order as before)
+const COMPANY_LINKS = [
+  { href: "/about", label: "About Us" },
+  { href: "/careers", label: "Careers" },
+  { href: "/help", label: "Help Center" },
+  { href: "/contact", label: "Contact" },
+];
+
+const LEGAL_LINKS = [
+  { href: "/terms", label: "Terms of Use" },
+  { href: "/privacy", label: "Privacy Policy" },
+];
+
+// NEW: one shared look for every bottom link (same classes the old buttons had, plus "block")
+const navLinkClass =
+  "block w-full px-3 py-2 text-left text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-lg transition-colors text-sm cursor-pointer";
 
 export default function LeftSidebar({ isDrawerMode = false, onLinkClick }) {
   const router = useRouter();
@@ -48,7 +65,7 @@ export default function LeftSidebar({ isDrawerMode = false, onLinkClick }) {
     if (onLinkClick) onLinkClick();
   };
 
-  // NEW: the assistant button no longer opens another page, it opens the chat modal
+  // The assistant button no longer opens another page, it opens the chat modal
   const handleChatClick = () => {
     dispatch(openChat()); // modal pops up from the bottom-right corner
     if (onLinkClick) onLinkClick(); // closes the mobile drawer so the modal is not hidden behind it
@@ -188,30 +205,32 @@ export default function LeftSidebar({ isDrawerMode = false, onLinkClick }) {
         </>
       )}
 
-      {/* Navigation Links */}
+      {/* Navigation Links (CHANGED: the old empty buttons are now real links to the 6 new pages) */}
       <nav className="flex-1 px-4 py-4">
         <div className="space-y-2 mb-4">
-          <button className="w-full px-3 py-2 text-left text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-lg transition-colors text-sm cursor-pointer">
-            About Us
-          </button>
-          <button className="w-full px-3 py-2 text-left text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-lg transition-colors text-sm cursor-pointer">
-            Careers
-          </button>
-          <button className="w-full px-3 py-2 text-left text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-lg transition-colors text-sm cursor-pointer">
-            Help Center
-          </button>
-          <button className="w-full px-3 py-2 text-left text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-lg transition-colors text-sm cursor-pointer">
-            Contact
-          </button>
+          {COMPANY_LINKS.map((link) => (
+            <Link
+              key={link.href}
+              href={link.href}
+              onClick={onLinkClick} // closes the mobile drawer after clicking
+              className={navLinkClass}
+            >
+              {link.label}
+            </Link>
+          ))}
         </div>
 
-        <div className="border-t border-gray-200 pt-4 mb-4">
-          <button className="w-full px-3 py-2 text-left text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-lg transition-colors text-sm cursor-pointer">
-            Terms of Use
-          </button>
-          <button className="w-full px-3 py-2 text-left text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded-lg transition-colors text-sm cursor-pointer">
-            Privacy Policy
-          </button>
+        <div className="border-t border-gray-200 pt-4 mb-4 space-y-2">
+          {LEGAL_LINKS.map((link) => (
+            <Link
+              key={link.href}
+              href={link.href}
+              onClick={onLinkClick}
+              className={navLinkClass}
+            >
+              {link.label}
+            </Link>
+          ))}
         </div>
       </nav>
 
