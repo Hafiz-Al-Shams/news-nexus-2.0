@@ -4,6 +4,7 @@
 import { useSession, signOut } from "next-auth/react";
 import { useDispatch } from "react-redux";
 import { logout as reduxLogout } from "@/store/slices/userSlice";
+import { openChat } from "@/store/slices/uiSlice"; // NEW: opens the chat modal
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useState } from "react";
@@ -11,11 +12,11 @@ import toast from "react-hot-toast";
 
 export default function LeftSidebar({ isDrawerMode = false, onLinkClick }) {
   const router = useRouter();
-  const { data: session, status } = useSession(); // CHANGED: the session itself is now the source of truth
+  const { data: session, status } = useSession(); // the session itself is the source of truth
   const dispatch = useDispatch();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
-  // CHANGED: user / login state come straight from the session (no waiting for Redux to be filled)
+  // User / login state come straight from the session (no waiting for Redux to be filled)
   const user = session?.user || null;
   const isAuthenticated = !!user;
   const isSessionLoading = status === "loading"; // only true in rare cases now, shows a placeholder instead of "Sign In"
@@ -47,6 +48,12 @@ export default function LeftSidebar({ isDrawerMode = false, onLinkClick }) {
     if (onLinkClick) onLinkClick();
   };
 
+  // NEW: the assistant button no longer opens another page, it opens the chat modal
+  const handleChatClick = () => {
+    dispatch(openChat()); // modal pops up from the bottom-right corner
+    if (onLinkClick) onLinkClick(); // closes the mobile drawer so the modal is not hidden behind it
+  };
+
   return (
     <div className="flex flex-col h-full">
       {/* Brand Name - Sticky */}
@@ -75,18 +82,18 @@ export default function LeftSidebar({ isDrawerMode = false, onLinkClick }) {
 
       <div className="border-t border-gray-200"></div>
 
-      {/* NewsNexus Assistant (the chat page itself asks logged-out visitors to log in) */}
+      {/* NewsNexus Assistant: opens the chat modal (the modal itself asks logged-out visitors to log in) */}
       <div className="px-4 py-4">
-        <Link
-          href="/chat-with-ai"
-          onClick={handleAssistantClick}
+        <button
+          type="button"
+          onClick={handleChatClick}
           className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-all font-medium text-sm flex items-center gap-3 text-gray-700"
         >
           <svg className="w-5 h-5 text-[#104AC2]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
           </svg>
           NewsNexus Assistant
-        </Link>
+        </button>
       </div>
 
       {/* Admin Dashboard link - only rendered for admins (also appears in the mobile drawer) */}
@@ -130,7 +137,7 @@ export default function LeftSidebar({ isDrawerMode = false, onLinkClick }) {
         /* Desktop/Tablet Mode: Sign In Button or Profile Section */
         <>
           {isSessionLoading ? (
-            // NEW: neutral placeholder while the session is unknown (so "Sign In" never flashes for a logged-in user)
+            // Neutral placeholder while the session is unknown (so "Sign In" never flashes for a logged-in user)
             <>
               <div className="px-4 py-4">
                 <div className="w-full h-12 bg-gray-100 rounded-lg animate-pulse"></div>

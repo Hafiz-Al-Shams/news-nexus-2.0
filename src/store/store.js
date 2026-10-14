@@ -1,11 +1,13 @@
 import { configureStore } from "@reduxjs/toolkit";
 import userReducer from "./slices/userSlice";
 import newsReducer from "./slices/newsSlice";
+import uiReducer from "./slices/uiSlice"; // NEW: chat modal open/closed state
 
 export const store = configureStore({
   reducer: {
     user: userReducer,
     news: newsReducer,
+    ui: uiReducer, // NEW
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({

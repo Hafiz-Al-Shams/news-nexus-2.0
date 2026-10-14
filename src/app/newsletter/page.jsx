@@ -12,7 +12,6 @@ const KIT_FORM_SCRIPT_SRC = "https://news-nexus.kit.com/c2d8be667a/index.js";
 
 const FEATURES = [
   "Daily email with the AI-summarized bulletin: the 12 most important stories",
-  `Sent once a day at ${SEND_TIME_TEXT}`,
   "Unsubscribe at any moment with the link at the bottom of every email",
 ];
 
