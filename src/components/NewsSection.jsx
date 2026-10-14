@@ -1,7 +1,7 @@
 // src>components>NewsSection.jsx  (MODIFIED)
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import Link from "next/link"; // used for the tablet "Subscribe Newsletter" link
 import {
@@ -9,11 +9,17 @@ import {
   fetchGuardianArticles,
   loadMoreGuardianArticles, // loads the next 30 articles
   setActiveSource,
+  fetchSearchResults,       // NEW: searches the whole Guardian archive
+  loadMoreSearchResults,    // NEW: next 30 search results
+  clearSearchResults,       // NEW: turns search mode off
+  setSearchInput,           // NEW: used by the "Clear search" buttons
 } from "@/store/slices/newsSlice";
 import NewsCard from "./NewsCard";
-import NewsFilterPanel from "./NewsFilterPanel"; // NEW: only used for the mobile / tablet filter block
+import NewsFilterPanel from "./NewsFilterPanel"; // only used for the mobile / tablet filter block
+import SearchBox from "./SearchBox"; // NEW: the real search input (replaces the disabled one)
 import ReviewsAccordion from "./layout/ReviewsAccordion";
-import useGuardianNews from "@/hooks/useGuardianNews"; // NEW: shared "load the news" action
+import useGuardianNews from "@/hooks/useGuardianNews"; // shared "load the news" action
+import { normalizeKeyword, MIN_SEARCH_LENGTH, SEARCH_DEBOUNCE_MS } from "@/utils/search"; // NEW
 import toast from "react-hot-toast";
 
 // Turns a date into "just now", "5m ago", "3h ago" (shown as "News updated 3h ago")
@@ -42,13 +48,23 @@ export default function NewsSection() {
     guardianLoadingMore,     // true while "Load More News" is loading
     guardianLastFetched,
     guardianCachedAt,        // when the shown news was fetched from Guardian
+    // NEW: search state
+    searchInput,
+    searchKeyword,
+    searchResults,
+    searchLoading,
+    searchError,
+    searchHasMore,
+    searchLoadingMore,
+    searchTotal,
+    searchCachedAt,
   } = useSelector((state) => state.news);
 
   const { fetchGuardianNews } = useGuardianNews(); // used by the retry buttons below
 
   const [hasFetchedNewsAPI, setHasFetchedNewsAPI] = useState(false);
-  const [searchQuery, setSearchQuery] = useState(""); // only used by the mobile / tablet search box
   const [showMobileFilters, setShowMobileFilters] = useState(false); // mobile / tablet filter block open or closed
+  const searchRequestRef = useRef(null); // the search that is running right now (so it can be cancelled)
 
   // Load the default news (Last 24 Hours, All Topics) automatically the first time the homepage opens.
   // If the articles are already in Redux (user came back from another page), nothing is reloaded.
@@ -57,6 +73,31 @@ export default function NewsSection() {
     dispatch(fetchGuardianArticles(filters));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // intentionally runs once when the section appears
+
+  // ===== NEW: DEBOUNCED SEARCH (this is the ONLY place that starts searches) =====
+  // The cleaned keyword: "  Climate   CHANGE " -> "climate change". Typing an extra space does NOT change it,
+  // so it does not restart the timer or trigger a new search.
+  const keyword = useMemo(() => normalizeKeyword(searchInput), [searchInput]);
+
+  useEffect(() => {
+    // Empty, whitespace-only or too short: no request at all, search mode off, normal news is shown again
+    if (keyword.length < MIN_SEARCH_LENGTH) {
+      searchRequestRef.current?.abort(); // cancel a search that is still running
+      dispatch(clearSearchResults());
+      return;
+    }
+
+    // Wait until the user stops typing. Every new keystroke resets this timer (cleanup below).
+    const timer = setTimeout(() => {
+      searchRequestRef.current?.abort(); // cancel the previous search, only the newest one matters
+      searchRequestRef.current = dispatch(fetchSearchResults(keyword));
+    }, SEARCH_DEBOUNCE_MS);
+
+    return () => clearTimeout(timer);
+  }, [keyword, dispatch]);
+
+  // Are we showing search results right now? (searchKeyword is only set while a search is active)
+  const isSearching = !!searchKeyword;
 
   // Fetch NewsAPI articles (kept for the retry button when NewsAPI is the active source)
   const fetchNewsAPINews = async () => {
@@ -100,35 +141,51 @@ export default function NewsSection() {
     }
   };
 
-  const getCurrentArticles = () => {
-    if (activeSource === "guardian") return guardianArticles;
-    return articles;
+  // NEW: "Load More" for SEARCH results, adds the next 30 matches below the current ones
+  const handleLoadMoreSearch = async () => {
+    try {
+      await dispatch(loadMoreSearchResults()).unwrap();
+    } catch (error) {
+      if (error?.name === "ConditionError") return;
+      console.error("Load more search error:", error);
+      toast.error(error.message || "Failed to load more results");
+    }
   };
 
-  const getCurrentLoading = () => {
-    if (activeSource === "guardian") return guardianLoading;
-    return loading;
-  };
+  // ===== Pick what to show: search results OR the normal news feed =====
+  const normalArticles = activeSource === "guardian" ? guardianArticles : articles;
+  const normalLoading = activeSource === "guardian" ? guardianLoading : loading;
+  const normalError = activeSource === "guardian" ? guardianError : error;
 
-  const getCurrentError = () => {
-    if (activeSource === "guardian") return guardianError;
-    return error;
-  };
-
-  const currentArticles = getCurrentArticles();
-  const currentLoading = getCurrentLoading();
-  const currentError = getCurrentError();
+  const currentArticles = isSearching ? searchResults : normalArticles;
+  const currentLoading = isSearching ? searchLoading : normalLoading;
+  const currentError = isSearching ? searchError : normalError;
 
   // "has the news been requested yet" comes from Redux (it survives leaving and returning to the page)
-  const hasFetched = activeSource === "guardian"
-    ? (!!guardianLastFetched || !!guardianError)
-    : hasFetchedNewsAPI;
+  const hasFetched = isSearching
+    ? true // a search is always "requested" the moment it starts
+    : activeSource === "guardian"
+      ? (!!guardianLastFetched || !!guardianError)
+      : hasFetchedNewsAPI;
 
   // Also show the loading spinner for the very first moment, before the automatic load has started
-  const showLoading = currentLoading || (activeSource === "guardian" && !hasFetched);
+  const showLoading = isSearching
+    ? searchLoading
+    : currentLoading || (activeSource === "guardian" && !hasFetched);
+
+  // Load More button values (search has its own page counter)
+  const hasMore = isSearching ? searchHasMore : guardianHasMore;
+  const loadingMore = isSearching ? searchLoadingMore : guardianLoadingMore;
+  const showLoadMore = isSearching || activeSource === "guardian";
+  const onLoadMore = isSearching ? handleLoadMoreSearch : handleLoadMore;
+  const cachedAt = isSearching ? searchCachedAt : activeSource === "guardian" ? guardianCachedAt : null;
 
   // Retry action used by the error / empty states
-  const retryAction = activeSource === "guardian" ? fetchGuardianNews : fetchNewsAPINews;
+  const retryAction = isSearching
+    ? () => dispatch(fetchSearchResults(searchKeyword)) // same keyword again (allowed because an error is shown)
+    : activeSource === "guardian"
+      ? fetchGuardianNews
+      : fetchNewsAPINews;
 
   return (
     <div className="space-y-6">
@@ -170,28 +227,8 @@ export default function NewsSection() {
 
         {showMobileFilters && (
           <div className="mt-3 space-y-3">
-            {/* Search box (disabled, same "coming soon" feature as in the sidebar) */}
-            <div>
-              <div className="relative">
-                <input
-                  type="text"
-                  placeholder="Search news..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  disabled
-                  className="w-full px-4 py-3 pr-10 bg-gray-50 border border-gray-300 rounded-xl text-sm text-gray-400 cursor-not-allowed focus:outline-none"
-                />
-                <svg
-                  className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
-              </div>
-              <p className="text-xs text-gray-500 mt-2">Search feature coming soon</p>
-            </div>
+            {/* NEW: the real search box (same one as in the desktop sidebar, they share the typed text) */}
+            <SearchBox />
 
             {/* The same filter card as in the desktop sidebar */}
             <NewsFilterPanel />
@@ -199,11 +236,38 @@ export default function NewsSection() {
         )}
       </div>
 
+      {/* NEW: search banner, shown only while search results are on screen */}
+      {isSearching && (
+        <div className="flex flex-wrap items-center justify-between gap-3 bg-white border border-gray-200 rounded-xl shadow-sm px-4 py-3">
+          <div className="min-w-0">
+            <p className="text-sm md:text-base text-gray-800">
+              Search results for <span className="font-semibold break-words">&ldquo;{searchKeyword}&rdquo;</span>
+            </p>
+            {!searchLoading && !searchError && (
+              <p className="text-xs text-gray-500 mt-0.5">
+                {searchTotal.toLocaleString()} {searchTotal === 1 ? "match" : "matches"} found in the Guardian archive
+              </p>
+            )}
+          </div>
+          <button
+            type="button"
+            onClick={() => dispatch(setSearchInput(""))} // empty box = search mode off
+            className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-xs md:text-sm font-medium"
+          >
+            Clear search
+          </button>
+        </div>
+      )}
+
       {/* Loading State (also shown right when the homepage opens, while the default news loads) */}
       {showLoading && (
         <div className="flex flex-col items-center justify-center py-20">
           <div className="inline-block w-12 md:w-16 h-12 md:h-16 border-4 border-[#104AC2] border-t-transparent rounded-full animate-spin mb-4"></div>
-          <p className="text-gray-600 text-base md:text-lg">Loading news from {activeSource === "guardian" ? "Guardian" : "NewsAPI"}...</p>
+          <p className="text-gray-600 text-base md:text-lg text-center px-4">
+            {isSearching
+              ? `Searching for "${searchKeyword}"...`
+              : `Loading news from ${activeSource === "guardian" ? "Guardian" : "NewsAPI"}...`}
+          </p>
         </div>
       )}
 
@@ -213,7 +277,9 @@ export default function NewsSection() {
           <svg className="w-10 md:w-12 h-10 md:h-12 text-red-500 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
-          <h3 className="text-base md:text-lg font-semibold text-red-800 mb-2">Failed to Load News</h3>
+          <h3 className="text-base md:text-lg font-semibold text-red-800 mb-2">
+            {isSearching ? "Search Failed" : "Failed to Load News"}
+          </h3>
           <p className="text-sm md:text-base text-red-600 mb-4">{currentError}</p>
           <button
             onClick={retryAction}
@@ -230,12 +296,13 @@ export default function NewsSection() {
           {/* Slim info row: article count + "News updated X ago" */}
           <div className="flex items-center justify-between">
             <p className="text-xs md:text-sm text-gray-600">
-              Showing <span className="font-semibold">{currentArticles.length}</span> articles
+              Showing <span className="font-semibold">{currentArticles.length}</span>{" "}
+              {isSearching && searchTotal > 0 ? `of ${searchTotal.toLocaleString()} ` : ""}articles
             </p>
-            {/* The news is cached for 12 hours, so this label replaces a refresh button */}
-            {activeSource === "guardian" && guardianCachedAt && (
+            {/* Results are cached for 12 hours, so this label replaces a refresh button */}
+            {cachedAt && (
               <p className="text-xs md:text-sm text-gray-500">
-                News updated {formatUpdated(guardianCachedAt)}
+                {isSearching ? "Results updated" : "News updated"} {formatUpdated(cachedAt)}
               </p>
             )}
           </div>
@@ -246,23 +313,23 @@ export default function NewsSection() {
             ))}
           </div>
 
-          {/* Load More News (adds 30 more, disabled when there is nothing more to load) */}
-          {activeSource === "guardian" && (
+          {/* Load More (adds 30 more, disabled when there is nothing more to load) */}
+          {showLoadMore && (
             <div className="flex justify-center pt-2">
               <button
-                onClick={handleLoadMore}
-                disabled={!guardianHasMore || guardianLoadingMore}
+                onClick={onLoadMore}
+                disabled={!hasMore || loadingMore}
                 className="px-6 md:px-8 py-3 bg-gradient-to-r from-[#1C3B7A] to-[#104AC2] text-white rounded-lg hover:from-[#153163] hover:to-[#0d3a9f] disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-md hover:shadow-lg font-semibold text-sm md:text-base flex items-center justify-center gap-3 min-w-[200px]"
               >
-                {guardianLoadingMore ? (
+                {loadingMore ? (
                   <>
                     <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
                     Loading more...
                   </>
-                ) : guardianHasMore ? (
-                  "Load More News"
+                ) : hasMore ? (
+                  isSearching ? "Load More Results" : "Load More News"
                 ) : (
-                  "No more news to load"
+                  isSearching ? "No more results to load" : "No more news to load"
                 )}
               </button>
             </div>
@@ -276,14 +343,27 @@ export default function NewsSection() {
           <svg className="w-12 md:w-16 h-12 md:h-16 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z" />
           </svg>
-          <h3 className="text-lg md:text-xl font-semibold text-gray-700 mb-2">No News Found</h3>
-          <p className="text-sm md:text-base text-gray-500 mb-4">Try adjusting your filters or check back later</p>
-          <button
-            onClick={retryAction}
-            className="px-6 py-2 bg-gradient-to-r from-[#1C3B7A] to-[#104AC2] text-white rounded-lg hover:from-[#153163] hover:to-[#0d3a9f] transition-colors text-sm md:text-base"
-          >
-            Refresh News
-          </button>
+          <h3 className="text-lg md:text-xl font-semibold text-gray-700 mb-2">
+            {isSearching ? `No results for "${searchKeyword}"` : "No News Found"}
+          </h3>
+          <p className="text-sm md:text-base text-gray-500 mb-4">
+            {isSearching ? "Try different keywords or check the spelling" : "Try adjusting your filters or check back later"}
+          </p>
+          {isSearching ? (
+            <button
+              onClick={() => dispatch(setSearchInput(""))}
+              className="px-6 py-2 bg-gradient-to-r from-[#1C3B7A] to-[#104AC2] text-white rounded-lg hover:from-[#153163] hover:to-[#0d3a9f] transition-colors text-sm md:text-base"
+            >
+              Clear search
+            </button>
+          ) : (
+            <button
+              onClick={retryAction}
+              className="px-6 py-2 bg-gradient-to-r from-[#1C3B7A] to-[#104AC2] text-white rounded-lg hover:from-[#153163] hover:to-[#0d3a9f] transition-colors text-sm md:text-base"
+            >
+              Refresh News
+            </button>
+          )}
         </div>
       )}
 

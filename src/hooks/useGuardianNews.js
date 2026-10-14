@@ -1,10 +1,10 @@
-// src>hooks>useGuardianNews.js  (NEW)
+// src>hooks>useGuardianNews.js  (MODIFIED)
 "use client";
 
 import { useCallback } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import toast from "react-hot-toast";
-import { fetchGuardianArticles, setActiveSource } from "@/store/slices/newsSlice";
+import { fetchGuardianArticles, setActiveSource, setSearchInput } from "@/store/slices/newsSlice";
 
 // Shared "load the news for the selected filters" action.
 // It is used by the right sidebar ("Get The News" button) AND by the retry buttons in the news section,
@@ -14,6 +14,10 @@ export default function useGuardianNews() {
   const filters = useSelector((state) => state.news.filters); // the filters the visitor has currently selected
 
   const fetchGuardianNews = useCallback(async () => {
+    // NEW: pressing "Get The News" means the visitor wants the filtered feed, so the search box is emptied
+    // (an empty search box switches search mode off and the filtered news becomes visible)
+    dispatch(setSearchInput(""));
+
     try {
       const result = await dispatch(fetchGuardianArticles(filters)).unwrap();
       dispatch(setActiveSource("guardian"));

@@ -25,6 +25,18 @@ const initialState = {
     time: "24h",
     topic: "all",
   },
+
+  // ===== NEW: SEARCH state =====
+  searchInput: "",              // exactly what is typed in the search box (shared by the sidebar + mobile search box)
+  searchKeyword: "",            // the cleaned keyword that is currently searched / shown ("" = search is off)
+  searchResults: [],            // articles found for searchKeyword
+  searchLoading: false,         // true while the FIRST page of a search is loading
+  searchError: null,
+  searchPage: 0,                // last search page that was loaded
+  searchHasMore: false,         // true when "Load More" has more search results to load
+  searchLoadingMore: false,     // true while "Load More" of the search is loading
+  searchTotal: 0,               // total number of matches reported by Guardian
+  searchCachedAt: null,         // when the shown search result was fetched from Guardian
   
   // 24hrs Bulletin data
   bulletin: {
@@ -180,6 +192,68 @@ export const loadMoreGuardianArticles = createAsyncThunk(
   }
 );
 
+// NEW: searches the WHOLE Guardian archive for a keyword (first page, 30 results)
+// "signal" lets the component cancel an old search when the user types something new
+export const fetchSearchResults = createAsyncThunk(
+  'news/fetchSearch',
+  async (keyword, { rejectWithValue, signal }) => {
+    try {
+      const params = new URLSearchParams({ q: keyword, page: '1' });
+
+      const response = await fetch(`/api/guardian/search?${params.toString()}`, { signal });
+      const data = await response.json();
+
+      if (!response.ok) {
+        return rejectWithValue(data);
+      }
+
+      return data;
+    } catch (error) {
+      return rejectWithValue({ error: error.message, message: error.message });
+    }
+  },
+  {
+    // Skip when this exact keyword is already loading or already shown without an error
+    // (an error is allowed through, so the "Try Again" button can search the same keyword again)
+    condition: (keyword, { getState }) => {
+      const s = getState().news;
+      return !(s.searchKeyword === keyword && (s.searchLoading || !s.searchError));
+    },
+  }
+);
+
+// NEW: loads the NEXT 30 search results for the keyword on screen and adds them below the current ones
+export const loadMoreSearchResults = createAsyncThunk(
+  'news/loadMoreSearch',
+  async (_, { getState, rejectWithValue }) => {
+    const { searchKeyword, searchPage } = getState().news;
+    try {
+      const params = new URLSearchParams({
+        q: searchKeyword,
+        page: String(searchPage + 1), // next page
+      });
+
+      const response = await fetch(`/api/guardian/search?${params.toString()}`);
+      const data = await response.json();
+
+      if (!response.ok) {
+        return rejectWithValue(data);
+      }
+
+      return data;
+    } catch (error) {
+      return rejectWithValue({ error: error.message, message: error.message });
+    }
+  },
+  {
+    // Only run when more results exist and nothing else is loading
+    condition: (_, { getState }) => {
+      const s = getState().news;
+      return s.searchHasMore && !s.searchLoading && !s.searchLoadingMore;
+    },
+  }
+);
+
 const newsSlice = createSlice({
   name: "news",
   initialState,
@@ -219,6 +293,22 @@ const newsSlice = createSlice({
           ...state.guardianArticles
         ].sort((a, b) => new Date(b.publishedAt) - new Date(a.publishedAt));
       }
+    },
+    // NEW: saves what the user types in the search box (both search boxes share this value)
+    setSearchInput: (state, action) => {
+      state.searchInput = action.payload;
+    },
+    // NEW: turns search mode OFF and forgets the results (the normal news feed is shown again)
+    clearSearchResults: (state) => {
+      state.searchKeyword = "";
+      state.searchResults = [];
+      state.searchLoading = false;
+      state.searchError = null;
+      state.searchPage = 0;
+      state.searchHasMore = false;
+      state.searchLoadingMore = false;
+      state.searchTotal = 0;
+      state.searchCachedAt = null;
     },
     clearNews: (state) => {
       state.articles = [];
@@ -316,6 +406,65 @@ const newsSlice = createSlice({
       .addCase(loadMoreGuardianArticles.rejected, (state) => {
         state.guardianLoadingMore = false; // the component shows an error toast, existing articles stay visible
       });
+
+    // NEW: SEARCH reducers (first page of a keyword)
+    builder
+      .addCase(fetchSearchResults.pending, (state, action) => {
+        state.searchKeyword = action.meta.arg; // search mode ON for this keyword
+        state.searchLoading = true;
+        state.searchError = null;
+        state.searchResults = []; // old results belong to the previous keyword, so they are removed
+        state.searchPage = 0;
+        state.searchHasMore = false;
+        state.searchLoadingMore = false;
+        state.searchTotal = 0;
+        state.searchCachedAt = null;
+      })
+      .addCase(fetchSearchResults.fulfilled, (state, action) => {
+        // Late answer for an older keyword (user typed something else meanwhile): ignore it
+        if (action.meta.arg !== state.searchKeyword) return;
+
+        state.searchLoading = false;
+        state.searchResults = action.payload.articles || [];
+        state.searchPage = action.payload.page || 1;
+        state.searchHasMore = !!action.payload.hasMore;
+        state.searchTotal = action.payload.total || 0;
+        state.searchCachedAt = action.payload.cachedAt || null;
+        state.searchError = null;
+      })
+      .addCase(fetchSearchResults.rejected, (state, action) => {
+        // A cancelled search (the user kept typing) or an old keyword must not touch the screen
+        if (action.meta.aborted || action.meta.arg !== state.searchKeyword) return;
+
+        state.searchLoading = false;
+        state.searchError = action.payload?.message || 'Failed to search news';
+      });
+
+    // NEW: SEARCH "Load More" reducers (adds the next page below the current results)
+    builder
+      .addCase(loadMoreSearchResults.pending, (state) => {
+        state.searchLoadingMore = true;
+      })
+      .addCase(loadMoreSearchResults.fulfilled, (state, action) => {
+        state.searchLoadingMore = false;
+
+        const { articles = [], page, hasMore, keyword } = action.payload;
+
+        // Ignore a late answer that belongs to an older keyword or an older page
+        if (keyword !== state.searchKeyword) return;
+        if (page !== state.searchPage + 1) return;
+
+        // Skip any article that is already on screen
+        const existingUrls = new Set(state.searchResults.map((a) => a.url));
+        const newArticles = articles.filter((a) => !existingUrls.has(a.url));
+
+        state.searchResults.push(...newArticles);
+        state.searchPage = page;
+        state.searchHasMore = !!hasMore;
+      })
+      .addCase(loadMoreSearchResults.rejected, (state) => {
+        state.searchLoadingMore = false; // the component shows an error toast, existing results stay visible
+      });
     
     // 24hrs Bulletin reducers
     builder
@@ -326,7 +475,7 @@ const newsSlice = createSlice({
       .addCase(fetch24hrsBulletin.fulfilled, (state, action) => {
         state.bulletin.loading = false;
         state.bulletin.bullets = action.payload.bullets || [];
-        // NEW: save the detailed cards that now arrive together with the bullets,
+        // The detailed cards arrive together with the bullets,
         // so "Show More Details" can open instantly without another request
         state.bulletin.detailedCards = action.payload.detailedCards || [];
         state.bulletin.lastFetched = new Date().toISOString();
@@ -365,6 +514,8 @@ export const {
   setTimeFilter,
   setTopicFilter,
   setActiveSource,
+  setSearchInput,      // NEW
+  clearSearchResults,  // NEW
   clearNews,
   clearBulletin,
 } = newsSlice.actions;

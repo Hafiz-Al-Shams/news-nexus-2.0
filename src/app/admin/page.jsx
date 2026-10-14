@@ -4,9 +4,13 @@ import { useState, useEffect, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import toast from "react-hot-toast"; // NEW: confirmation messages for review actions
 
 // How often the admin page refreshes the users data (this is what makes it "real-time")
 const POLL_INTERVAL_MS = 10 * 1000; // 10 seconds
+
+// NEW: how often the review list refreshes (also keeps the "pending" badge up to date)
+const REVIEWS_POLL_MS = 30 * 1000; // 30 seconds
 
 // Turns a date into "Just now", "5m ago", "3h ago", or a full date
 function formatLastSeen(dateString) {
@@ -20,7 +24,7 @@ function formatLastSeen(dateString) {
   return new Date(dateString).toLocaleDateString();
 }
 
-// NEW: turns Kit's subscriber state into a readable label and badge color
+// Turns Kit's subscriber state into a readable label and badge color
 function subscriberStatus(state) {
   switch (state) {
     case "active":
@@ -38,6 +42,21 @@ function subscriberStatus(state) {
   }
 }
 
+// NEW: badge for a review's approval status
+function reviewStatusBadge(status) {
+  switch (status) {
+    case "approved":
+      return { label: "Approved", className: "bg-green-100 text-green-700" };
+    case "rejected":
+      return { label: "Rejected", className: "bg-red-100 text-red-700" };
+    default:
+      return { label: "Pending approval", className: "bg-yellow-100 text-yellow-700" };
+  }
+}
+
+const STAR_PATH =
+  "M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z";
+
 export default function AdminPage() {
   const router = useRouter();
   const { status } = useSession();
@@ -51,10 +70,10 @@ export default function AdminPage() {
   const [activeTab, setActiveTab] = useState("online"); // users tab: "online" or "all"
   const [lastUpdated, setLastUpdated] = useState(null);
 
-  // NEW: which main section is open: "users" or "subscribers"
+  // Which main section is open: "users", "subscribers" or "reviews"
   const [section, setSection] = useState("users");
 
-  // NEW: newsletter subscribers state (loaded from Kit through /api/admin/subscribers)
+  // Newsletter subscribers state (loaded from Kit through /api/admin/subscribers)
   const [subscribers, setSubscribers] = useState([]);
   const [subsCounts, setSubsCounts] = useState({ active: 0, pending: 0, unsubscribed: 0, total: 0 });
   const [subsTruncated, setSubsTruncated] = useState(false); // true when there are more subscribers than were loaded
@@ -63,6 +82,15 @@ export default function AdminPage() {
   const [subsError, setSubsError] = useState(null);
   const [subsFilter, setSubsFilter] = useState("active"); // "active" or "all"
   const [subsUpdated, setSubsUpdated] = useState(null);
+
+  // ===== NEW: USER REVIEWS state (site reviews that wait for approval) =====
+  const [reviews, setReviews] = useState([]);                              // reviews of the selected tab
+  const [reviewCounts, setReviewCounts] = useState({ pending: 0, approved: 0, rejected: 0 });
+  const [reviewsFilter, setReviewsFilter] = useState("pending");           // "pending" | "approved" | "rejected"
+  const [reviewsLoading, setReviewsLoading] = useState(false);
+  const [reviewsError, setReviewsError] = useState(null);
+  const [reviewsUpdated, setReviewsUpdated] = useState(null);
+  const [actionId, setActionId] = useState(null);                          // review that is being updated right now
 
   // Fetch users from the admin API
   const fetchUsers = useCallback(async () => {
@@ -91,7 +119,7 @@ export default function AdminPage() {
     }
   }, []);
 
-  // NEW: fetch newsletter subscribers from the admin API (which reads them from Kit)
+  // Fetch newsletter subscribers from the admin API (which reads them from Kit)
   const fetchSubscribers = useCallback(async () => {
     setSubsLoading(true);
     try {
@@ -120,6 +148,76 @@ export default function AdminPage() {
     }
   }, []);
 
+  // NEW: fetch the reviews of the selected tab (+ the counts of all tabs) from the admin API
+  const fetchAdminReviews = useCallback(async () => {
+    setReviewsLoading(true);
+    try {
+      const response = await fetch(`/api/admin/reviews?status=${reviewsFilter}`, { cache: "no-store" });
+
+      if (response.status === 403) {
+        setAccessDenied(true);
+        return;
+      }
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Failed to load reviews");
+
+      setReviews(data.reviews);
+      setReviewCounts(data.counts);
+      setReviewsUpdated(new Date());
+      setReviewsError(null);
+    } catch (err) {
+      console.error("Admin reviews fetch error:", err);
+      setReviewsError(err.message);
+    } finally {
+      setReviewsLoading(false);
+    }
+  }, [reviewsFilter]);
+
+  // NEW: approve / reject / move back to pending
+  const handleReviewAction = async (id, action) => {
+    setActionId(id);
+    try {
+      const response = await fetch(`/api/admin/reviews/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Failed to update review");
+
+      toast.success(
+        action === "approve" ? "Review approved, it is now public" : action === "reject" ? "Review rejected" : "Moved back to pending"
+      );
+      await fetchAdminReviews(); // reload the list and the counts
+    } catch (err) {
+      console.error("Review action error:", err);
+      toast.error(err.message || "Failed to update review");
+    } finally {
+      setActionId(null);
+    }
+  };
+
+  // NEW: delete a review forever (asks first)
+  const handleReviewDelete = async (id) => {
+    if (!window.confirm("Delete this review permanently?")) return;
+
+    setActionId(id);
+    try {
+      const response = await fetch(`/api/admin/reviews/${id}`, { method: "DELETE" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Failed to delete review");
+
+      toast.success("Review deleted");
+      await fetchAdminReviews();
+    } catch (err) {
+      console.error("Review delete error:", err);
+      toast.error(err.message || "Failed to delete review");
+    } finally {
+      setActionId(null);
+    }
+  };
+
   // Send logged-out visitors to the login page
   useEffect(() => {
     if (status === "unauthenticated") router.push("/login");
@@ -135,18 +233,37 @@ export default function AdminPage() {
     return () => clearInterval(intervalId); // stop polling when leaving the page
   }, [status, accessDenied, fetchUsers]);
 
-  // NEW: load subscribers the first time the "Newsletter Subscribers" section is opened (no auto-polling, protects the Kit rate limit)
+  // Load subscribers the first time the "Newsletter Subscribers" section is opened (no auto-polling, protects the Kit rate limit)
   useEffect(() => {
     if (section !== "subscribers" || status !== "authenticated" || accessDenied || subsLoaded) return;
     fetchSubscribers();
   }, [section, status, accessDenied, subsLoaded, fetchSubscribers]);
 
+  // NEW: load reviews right away (so the "pending" badge on the tab is correct), reload when the tab changes,
+  // and refresh every 30 seconds so new reviews appear without pressing anything
+  useEffect(() => {
+    if (status !== "authenticated" || accessDenied) return;
+
+    fetchAdminReviews();
+    const intervalId = setInterval(fetchAdminReviews, REVIEWS_POLL_MS);
+
+    return () => clearInterval(intervalId);
+  }, [status, accessDenied, fetchAdminReviews]);
+
   // Rows shown in the users table depend on the selected tab
   const onlineUsers = users.filter((u) => u.isOnline);
   const visibleUsers = activeTab === "online" ? onlineUsers : users;
 
-  // NEW: rows shown in the subscribers table depend on the selected filter
+  // Rows shown in the subscribers table depend on the selected filter
   const visibleSubscribers = subsFilter === "active" ? subscribers.filter((s) => s.state === "active") : subscribers;
+
+  // Shared look of the 3 main section buttons
+  const sectionButtonClass = (name) =>
+    `px-4 sm:px-6 py-2.5 rounded-lg text-sm font-semibold transition-all ${
+      section === name
+        ? "bg-gray-900 text-white shadow-md"
+        : "bg-white text-gray-700 border border-gray-200 hover:bg-gray-100"
+    }`;
 
   // ---------- Loading screen ----------
   if (status === "loading" || (status === "authenticated" && loading && !accessDenied)) {
@@ -200,27 +317,22 @@ export default function AdminPage() {
       </div>
 
       <main className="container mx-auto px-4 py-20 sm:py-24 max-w-6xl">
-        {/* NEW: main section switch (Users / Newsletter Subscribers) */}
-        <div className="flex gap-2 mb-6 border-b border-gray-200 pb-4">
-          <button
-            onClick={() => setSection("users")}
-            className={`px-4 sm:px-6 py-2.5 rounded-lg text-sm font-semibold transition-all ${
-              section === "users"
-                ? "bg-gray-900 text-white shadow-md"
-                : "bg-white text-gray-700 border border-gray-200 hover:bg-gray-100"
-            }`}
-          >
+        {/* Main section switch (Users / Newsletter Subscribers / User Reviews) */}
+        <div className="flex flex-wrap gap-2 mb-6 border-b border-gray-200 pb-4">
+          <button onClick={() => setSection("users")} className={sectionButtonClass("users")}>
             Users
           </button>
-          <button
-            onClick={() => setSection("subscribers")}
-            className={`px-4 sm:px-6 py-2.5 rounded-lg text-sm font-semibold transition-all ${
-              section === "subscribers"
-                ? "bg-gray-900 text-white shadow-md"
-                : "bg-white text-gray-700 border border-gray-200 hover:bg-gray-100"
-            }`}
-          >
+          <button onClick={() => setSection("subscribers")} className={sectionButtonClass("subscribers")}>
             Newsletter Subscribers
+          </button>
+          {/* NEW: reviews section, with a red counter when reviews are waiting for approval */}
+          <button onClick={() => setSection("reviews")} className={`${sectionButtonClass("reviews")} inline-flex items-center gap-2`}>
+            User Reviews
+            {reviewCounts.pending > 0 && (
+              <span className="min-w-[1.25rem] h-5 px-1.5 rounded-full bg-red-600 text-white text-[11px] font-bold flex items-center justify-center">
+                {reviewCounts.pending}
+              </span>
+            )}
           </button>
         </div>
 
@@ -346,7 +458,7 @@ export default function AdminPage() {
           </>
         )}
 
-        {/* ================= NEWSLETTER SUBSCRIBERS SECTION (NEW) ================= */}
+        {/* ================= NEWSLETTER SUBSCRIBERS SECTION (unchanged) ================= */}
         {section === "subscribers" && (
           <>
             {/* Refresh bar (subscribers are loaded from Kit on demand, not every 10 seconds) */}
@@ -455,6 +567,156 @@ export default function AdminPage() {
                     })}
                   </tbody>
                 </table>
+              )}
+            </div>
+          </>
+        )}
+
+        {/* ================= USER REVIEWS SECTION (NEW) ================= */}
+        {section === "reviews" && (
+          <>
+            {/* Refresh bar */}
+            <div className="flex items-center justify-end gap-3 mb-4 text-xs sm:text-sm text-gray-500">
+              {reviewsUpdated && <span>Updated {reviewsUpdated.toLocaleTimeString()}</span>}
+              <button
+                onClick={fetchAdminReviews}
+                disabled={reviewsLoading}
+                className="px-4 py-2 bg-white border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+              >
+                {reviewsLoading ? "Loading..." : "Refresh"}
+              </button>
+            </div>
+
+            {/* Error banner */}
+            {reviewsError && (
+              <div className="mb-4 bg-red-50 border border-red-200 rounded-lg p-4 text-sm text-red-700">
+                {reviewsError}
+              </div>
+            )}
+
+            {/* Stat cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+              <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                <p className="text-sm text-gray-500 mb-1">Waiting for approval</p>
+                <p className="text-3xl sm:text-4xl font-bold text-yellow-600">{reviewCounts.pending}</p>
+              </div>
+              <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                <p className="text-sm text-gray-500 mb-1">Approved (public)</p>
+                <p className="text-3xl sm:text-4xl font-bold text-green-600">{reviewCounts.approved}</p>
+              </div>
+              <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                <p className="text-sm text-gray-500 mb-1">Rejected</p>
+                <p className="text-3xl sm:text-4xl font-bold text-gray-600">{reviewCounts.rejected}</p>
+              </div>
+            </div>
+
+            {/* Filter tabs */}
+            <div className="flex flex-wrap gap-2 mb-4">
+              {[
+                { key: "pending", label: `Pending (${reviewCounts.pending})` },
+                { key: "approved", label: `Approved (${reviewCounts.approved})` },
+                { key: "rejected", label: `Rejected (${reviewCounts.rejected})` },
+              ].map((tab) => (
+                <button
+                  key={tab.key}
+                  onClick={() => setReviewsFilter(tab.key)}
+                  className={`px-4 sm:px-6 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                    reviewsFilter === tab.key
+                      ? "bg-gradient-to-r from-[#1C3B7A] to-[#104AC2] text-white shadow-md"
+                      : "bg-white text-gray-700 border border-gray-200 hover:bg-gray-100"
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Review cards */}
+            <div className="space-y-3">
+              {reviewsLoading && reviews.length === 0 ? (
+                <div className="bg-white rounded-xl shadow-sm border border-gray-200 text-center py-16 text-gray-500">
+                  Loading reviews...
+                </div>
+              ) : reviews.length === 0 ? (
+                <div className="bg-white rounded-xl shadow-sm border border-gray-200 text-center py-16 text-gray-500">
+                  {reviewsFilter === "pending" ? "No reviews are waiting for approval." : `No ${reviewsFilter} reviews.`}
+                </div>
+              ) : (
+                reviews.map((r) => {
+                  const badge = reviewStatusBadge(r.status);
+                  const busy = actionId === r.id; // buttons of this card are disabled while its request runs
+                  return (
+                    <div key={r.id} className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+                      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+                        <div className="flex items-start gap-3 min-w-0">
+                          <div className="w-10 h-10 bg-gradient-to-br from-[#1C3B7A] to-[#104AC2] rounded-full flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
+                            {(r.userName || r.userEmail)?.[0]?.toUpperCase() || "U"}
+                          </div>
+                          <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="font-semibold text-gray-800 text-sm">{r.userName || "Reader"}</p>
+                              <span className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-medium ${badge.className}`}>
+                                {badge.label}
+                              </span>
+                            </div>
+                            <p className="text-xs text-gray-500 break-all">{r.userEmail}</p>
+
+                            {/* Stars */}
+                            <div className="flex items-center gap-0.5 mt-2">
+                              {[...Array(5)].map((_, i) => (
+                                <svg
+                                  key={i}
+                                  className={`w-4 h-4 ${i < r.rating ? "text-yellow-400" : "text-gray-300"}`}
+                                  fill="currentColor"
+                                  viewBox="0 0 20 20"
+                                >
+                                  <path d={STAR_PATH} />
+                                </svg>
+                              ))}
+                            </div>
+
+                            <p className="text-sm text-gray-700 mt-2 break-words whitespace-pre-wrap">{r.comment}</p>
+                            <p className="text-xs text-gray-400 mt-2">
+                              Submitted {new Date(r.createdAt).toLocaleString()}
+                              {r.reviewedAt && ` • reviewed ${new Date(r.reviewedAt).toLocaleString()}`}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Action buttons depend on the current status */}
+                        <div className="flex flex-wrap gap-2 sm:flex-col sm:items-stretch flex-shrink-0">
+                          {r.status !== "approved" && (
+                            <button
+                              onClick={() => handleReviewAction(r.id, "approve")}
+                              disabled={busy}
+                              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              Approve
+                            </button>
+                          )}
+                          {r.status !== "rejected" && (
+                            <button
+                              onClick={() => handleReviewAction(r.id, "reject")}
+                              disabled={busy}
+                              className="px-4 py-2 bg-white border border-red-200 text-red-600 rounded-lg hover:bg-red-50 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              {r.status === "approved" ? "Remove from site" : "Reject"}
+                            </button>
+                          )}
+                          {r.status === "rejected" && (
+                            <button
+                              onClick={() => handleReviewDelete(r.id)}
+                              disabled={busy}
+                              className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              Delete
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
               )}
             </div>
           </>
