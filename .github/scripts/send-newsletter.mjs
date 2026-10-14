@@ -14,7 +14,7 @@ const {
 } = process.env;
 
 const KIT_BASE_URL = "https://api.kit.com/v4";
-const SITE_URL = "https://news-nexus-2.vercel.app/"; // link shown in the email, change if your domain changes
+const SITE_URL = "https://news-nexus-v2.vercel.app/"; // link shown in the email, change if your domain changes
 const MAX_BULLETIN_AGE_MS = 24 * 60 * 60 * 1000; // news may be up to 24 hours old (your project rule)
 const SEND_DELAY_MS = 2 * 60 * 1000;             // CHANGED: no fixed send time any more, the email is sent 2 minutes after the run starts
 const MAX_RETRIES = 4;                           // retries for rate limits / temporary server errors
