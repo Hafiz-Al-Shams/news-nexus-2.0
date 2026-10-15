@@ -105,3 +105,10 @@ body {
 .dark .swal2-html-container { color: #e3e8f0; }
 .dark .swal2-icon.swal2-success [class^="swal2-success-circular-line"],
 .dark .swal2-icon.swal2-success .swal2-success-fix { background: #151e30; } /* removes white patches in the success icon */
+
+/* ===== NEW: hide the floating "Chat with AI" button on the not-found (404) page =====
+   not-found.jsx carries a data-not-found marker. When the marker is anywhere in the page, the launcher
+   (class "chat-launcher", rendered by ChatLauncher in layout.js) is hidden. Pure CSS, so there is no flash on load. */
+body:has([data-not-found]) .chat-launcher {
+  display: none;
+}

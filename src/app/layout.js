@@ -7,7 +7,8 @@ import NextAuthProvider from "@/Providers/NextAuthProvider";
 import ReduxProvider from "@/Providers/ReduxProvider";
 import PresenceHeartbeat from "@/components/PresenceHeartbeat";
 import ThemeToggle from "@/components/ThemeToggle"; // light/dark toggle button
-import ChatModal from "@/components/ChatModal"; // NEW: the AI chat modal (opens from the bottom-right on any page)
+import ChatModal from "@/components/ChatModal"; // the AI chat modal (opens from the bottom-right on any page)
+import ChatLauncher from "@/components/ChatLauncher"; // NEW: the floating "Chat with AI" button, now on every page
 import { Toaster } from "react-hot-toast";
 
 const geistSans = Geist({
@@ -66,7 +67,10 @@ export default async function RootLayout({ children }) {
             />
             {/* Floating theme toggle, visible on every page */}
             <ThemeToggle />
-            {/* NEW: chat modal, needs both Redux (open/close) and the session (login check), so it lives inside both providers */}
+            {/* NEW: floating "Chat with AI" button on every page (globals.css hides it on the not-found page).
+                Needs Redux (opens the modal), so it lives inside the providers. */}
+            <ChatLauncher />
+            {/* Chat modal, needs both Redux (open/close) and the session (login check), so it lives inside both providers */}
             <ChatModal />
           </NextAuthProvider>
         </ReduxProvider>

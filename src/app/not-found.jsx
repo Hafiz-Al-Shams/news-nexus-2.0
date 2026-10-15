@@ -1,9 +1,11 @@
+// src>app>not-found.jsx  (MODIFIED)
 import Link from "next/link";
 
 // Shown automatically by Next.js for ANY URL that does not exist (typos, deleted pages like /chat-with-ai, etc.)
 export default function NotFound() {
   return (
-    <div className="min-h-screen bg-gray-50 relative flex items-center justify-center px-4 overflow-hidden">
+    // data-not-found is a marker: globals.css hides the floating "Chat with AI" button whenever it is on the page
+    <div data-not-found className="min-h-screen bg-gray-50 relative flex items-center justify-center px-4 overflow-hidden">
       {/* Website Name - Top Left (same as the other pages, links home) */}
       <Link href="/" className="absolute top-6 left-6 sm:top-8 sm:left-8 z-10">
         <h1 className="text-base lg:text-2xl font-bold">

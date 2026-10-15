@@ -1,7 +1,9 @@
+// src>app>newsletter>page.jsx  (MODIFIED)
 "use client";
 
 import { useEffect, useRef } from "react";
 import Link from "next/link";
+import SiteFooter from "@/components/SiteFooter"; // NEW: the exact same footer used by About, Careers, Help, Contact, Terms, Privacy and the bulletin page
 
 // Shown on the page (the send time matches the schedule in the workflow file: 01:30 UTC = 7:30 AM Dhaka)
 const SEND_TIME_TEXT = "7:30 AM (Dhaka time, UTC+6)";
@@ -36,7 +38,8 @@ export default function NewsletterPage() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-gray-50 relative">
+    // CHANGED: flex column, so the footer is pushed to the bottom even when the content is short (same as the bulletin page)
+    <div className="min-h-screen bg-gray-50 relative flex flex-col">
       {/* Website Name - Top Left */}
       <Link href="/" className="absolute top-6 left-6 sm:top-8 sm:left-8 z-50">
         <h1 className="text-base lg:text-2xl font-bold">
@@ -50,7 +53,8 @@ export default function NewsletterPage() {
         <h2 className="text-base sm:text-lg font-semibold text-gray-800">Daily Newsletter</h2>
       </div>
 
-      <main className="container mx-auto px-4 py-20 sm:py-24 max-w-3xl">
+      {/* CHANGED: flex-1 w-full makes the content take all free height, so the footer stays at the bottom */}
+      <main className="flex-1 w-full container mx-auto px-4 py-20 sm:py-24 max-w-3xl">
         {/* Intro card */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 sm:p-8 mb-8 text-center">
           <h3 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2">The NewsNexus Daily Bulletin</h3>
@@ -83,6 +87,9 @@ export default function NewsletterPage() {
           </ul>
         </div>
       </main>
+
+      {/* NEW: the exact same footer as every other page */}
+      <SiteFooter />
     </div>
   );
 }

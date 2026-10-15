@@ -8,7 +8,8 @@ import Link from "next/link";
 import SpeakButton from "@/components/SpeakButton"; // text to speech button
 import AddReviewButton from "@/components/AddReviewButton"; // the same review button + pop-up used in the right sidebar
 import ShareBulletin from "@/components/ShareBulletin"; // Facebook / X / Instagram share buttons
-import SiteFooter from "@/components/SiteFooter"; // NEW: the same footer as About, Careers, Help ...
+import SiteFooter from "@/components/SiteFooter"; // the same footer as About, Careers, Help ...
+import BackToTopButton from "@/components/layout/BackToTopButton"; // NEW: the same back to top button as the homepage (window mode)
 
 // Small helper: 1 -> "01", 12 -> "12" (used for the number badges)
 const pad = (n) => String(n).padStart(2, "0");
@@ -64,7 +65,7 @@ export default function Bulletin24HrsPage() {
         : null;
 
     return (
-        // CHANGED: flex column, so the footer is pushed to the bottom even when the content is short
+        // flex column, so the footer is pushed to the bottom even when the content is short
         <div className="min-h-screen bg-gray-50 relative flex flex-col">
             {/* Website Name - Top Left (UNCHANGED) */}
             <Link href="/" className="absolute top-6 left-6 sm:top-8 sm:left-8 z-50">
@@ -133,7 +134,7 @@ export default function Bulletin24HrsPage() {
                         {!showDetails && (
                             <div className="max-w-4xl mx-auto space-y-6">
                                 {/* Hero card (brand gradient).
-                                    CHANGED: two columns on large screens (text left, "full picture" card right),
+                                    Two columns on large screens (text left, "full picture" card right),
                                     stacked on phones and tablets. */}
                                 <section className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#1C3B7A] to-[#104AC2] p-6 sm:p-10 text-white shadow-xl">
                                     {/* Soft decorative glows */}
@@ -164,7 +165,7 @@ export default function Bulletin24HrsPage() {
                                             </div>
                                         </div>
 
-                                        {/* ----- Right column: "Want the full picture?" card (moved here from the page bottom) ----- */}
+                                        {/* ----- Right column: "Want the full picture?" card ----- */}
                                         <div className="rounded-2xl bg-white/10 border border-white/20 backdrop-blur-sm p-5 flex flex-col justify-between gap-4">
                                             <div>
                                                 <span className="w-10 h-10 rounded-xl bg-white/15 flex items-center justify-center mb-3">
@@ -221,8 +222,6 @@ export default function Bulletin24HrsPage() {
                                         </li>
                                     ))}
                                 </ol>
-
-                                {/* REMOVED: the old "Want the full picture?" card that was here (it is in the header now) */}
                             </div>
                         )}
 
@@ -350,9 +349,14 @@ export default function Bulletin24HrsPage() {
                 )}
             </main>
 
-            {/* NEW: the exact same footer as the About / Careers / Help / Contact / Terms / Privacy pages.
+            {/* The exact same footer as the About / Careers / Help / Contact / Terms / Privacy pages.
                 Shown in the short view, the detailed view and the loading / error / empty states. */}
             <SiteFooter />
+
+            {/* NEW: back to top button. No scrollRef = "window mode": it follows the page scroll and is fixed to the screen.
+                This one button serves BOTH the short view and the detailed view (they are the same page).
+                It appears after scrolling 400px and smoothly scrolls the page to the top. */}
+            <BackToTopButton />
         </div>
     );
 }
