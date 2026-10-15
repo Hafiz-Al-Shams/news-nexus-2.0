@@ -178,10 +178,12 @@ export default function LeftSidebar({ isDrawerMode = false, onLinkClick }) {
                       <p className="text-xs text-gray-500 truncate">{user.email}</p>
                     </div>
                   </div>
+                  {/* CHANGED: logout is now the same neutral gray as the "Sign In" button (was red).
+                      Logging out is not a dangerous action, so the brand-friendly gray fits better than a warning color. */}
                   <button
                     onClick={handleLogout}
                     disabled={isLoggingOut}
-                    className="w-full px-4 py-2 bg-red-800 text-white rounded-lg hover:bg-red-900 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
+                    className="w-full px-4 py-2 bg-[#666666] text-white rounded-lg hover:bg-[#555555] transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
                   >
                     {isLoggingOut ? "Logging out..." : "Logout"}
                   </button>

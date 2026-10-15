@@ -1,7 +1,7 @@
 // src>components>layout>UserModal.jsx  (MODIFIED)
 "use client";
 
-import { signOut, useSession } from "next-auth/react"; // CHANGED: also reads the session directly
+import { signOut, useSession } from "next-auth/react"; // also reads the session directly
 import { useDispatch } from "react-redux";
 import { logout as reduxLogout } from "@/store/slices/userSlice";
 import { useState } from "react";
@@ -11,7 +11,7 @@ import Link from "next/link";
 export default function UserModal({ isOpen, onClose }) {
   const dispatch = useDispatch();
   const { data: session } = useSession();
-  const user = session?.user || null; // CHANGED: no more waiting for Redux
+  const user = session?.user || null; // no more waiting for Redux
   const isAuthenticated = !!user;
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
@@ -53,11 +53,12 @@ export default function UserModal({ isOpen, onClose }) {
               <p className="text-sm text-gray-500">{user.email}</p>
             </div>
 
-            {/* Logout Button */}
+            {/* Logout Button
+                CHANGED: same neutral gray as the desktop sidebar logout (was red), so both places match */}
             <button
               onClick={handleLogout}
               disabled={isLoggingOut}
-              className="w-full px-4 py-3 bg-red-800 text-white rounded-lg hover:bg-red-900 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm font-semibold"
+              className="w-full px-4 py-3 bg-[#666666] text-white rounded-lg hover:bg-[#555555] transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm font-semibold"
             >
               {isLoggingOut ? "Logging out..." : "Logout"}
             </button>

@@ -1,13 +1,12 @@
-// src>components>ReviewsPanel.jsx  (NEW)
+// src>components>ReviewsPanel.jsx  (MODIFIED)
 // The whole review section: list (3 permanent reviews first), calculated average, and the "Add Review" button.
 // Used by the right sidebar (desktop) AND the mobile accordion.
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { useSession } from "next-auth/react";
 import { fetchReviews } from "@/store/slices/reviewsSlice";
-import ReviewModal from "./ReviewModal";
+import AddReviewButton from "./AddReviewButton"; // CHANGED: the shared button (login check + pop-up live there now)
 
 const STAR_PATH =
   "M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z";
@@ -43,11 +42,7 @@ export function RatingBadge() {
 // showHeader=false is used inside the mobile accordion (it has its own header)
 export default function ReviewsPanel({ showHeader = true }) {
   const dispatch = useDispatch();
-  const { status } = useSession();
   const { items, loading } = useSelector((state) => state.reviews);
-  const [modalOpen, setModalOpen] = useState(false);
-
-  const isLoggedIn = status === "authenticated";
 
   // Load the reviews once (the second panel on the page is skipped automatically by the thunk's condition)
   useEffect(() => {
@@ -104,31 +99,11 @@ export default function ReviewsPanel({ showHeader = true }) {
         })}
       </div>
 
-      {/* "Add review" button at the end of the list */}
+      {/* "Add review" button at the end of the list (same shared button + pop-up as every other page) */}
       <div className="mt-4">
-        {isLoggedIn ? (
-          <button
-            type="button"
-            onClick={() => setModalOpen(true)}
-            className="w-full px-5 py-2.5 bg-gradient-to-r from-[#1C3B7A] to-[#104AC2] text-white rounded-lg hover:from-[#153163] hover:to-[#0d3a9f] transition-all shadow-md hover:shadow-lg font-semibold text-sm"
-          >
-            Add Review
-          </button>
-        ) : (
-          // Logged-out (or still loading): disabled button that tells the visitor what to do
-          <button
-            type="button"
-            disabled
-            className="w-full px-5 py-2.5 bg-gray-200 text-gray-500 rounded-lg cursor-not-allowed font-semibold text-sm"
-          >
-            {status === "loading" ? "Add Review" : "Log in to add a review"}
-          </button>
-        )}
+        <AddReviewButton className="w-full" />
         {loading && <p className="text-[11px] text-gray-400 text-center mt-2">Updating reviews...</p>}
       </div>
-
-      {/* The pop-up (only opens for logged-in users) */}
-      <ReviewModal isOpen={modalOpen} onClose={() => setModalOpen(false)} />
     </section>
   );
 }

@@ -2,27 +2,20 @@
 
 import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { useRouter } from "next/navigation";
-import { useSession } from "next-auth/react";
 import { fetch24hrsBulletin, expandBulletinDetails } from "@/store/slices/newsSlice";
 import toast from "react-hot-toast";
 import Link from "next/link";
 import SpeakButton from "@/components/SpeakButton"; // text to speech button
+import AddReviewButton from "@/components/AddReviewButton"; // the same review button + pop-up used in the right sidebar
+import ShareBulletin from "@/components/ShareBulletin"; // NEW: Facebook / X / Instagram share buttons
 
 // Small helper: 1 -> "01", 12 -> "12" (used for the number badges)
 const pad = (n) => String(n).padStart(2, "0");
 
 export default function Bulletin24HrsPage() {
-    const router = useRouter();
     const dispatch = useDispatch();
-    const { data: session, status } = useSession(); // "status" tells us if the visitor is logged in
     const { bulletin } = useSelector((state) => state.news);
     const [showDetails, setShowDetails] = useState(false);
-    const [showReview, setShowReview] = useState(false);
-    const [rating, setRating] = useState(0);
-    const [hoverRating, setHoverRating] = useState(0); // NEW: stars light up while hovering
-    const [comment, setComment] = useState("");
-    const [submittingReview, setSubmittingReview] = useState(false);
 
     useEffect(() => {
         dispatch(fetch24hrsBulletin());
@@ -51,44 +44,6 @@ export default function Bulletin24HrsPage() {
     const handleBackToBullets = () => {
         setShowDetails(false); // the detailed view (and its Listen button) unmounts, so the voice stops automatically
         scrollToTop();
-    };
-
-    const handleReviewSubmit = async () => {
-        if (rating === 0) {
-            toast.error("Please select a rating");
-            return;
-        }
-
-        setSubmittingReview(true);
-
-        try {
-            const response = await fetch("/api/reviews/submit", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    rating,
-                    comment: comment.trim(),
-                    reviewType: 'bulletin_details'
-                }),
-            });
-
-            const data = await response.json();
-
-            if (!response.ok) {
-                throw new Error(data.error || "Failed to submit review");
-            }
-
-            toast.success("Thank you for your feedback!");
-            setShowReview(false);
-            setRating(0);
-            setHoverRating(0);
-            setComment("");
-        } catch (err) {
-            console.error("Review error:", err);
-            toast.error(err.message || "Failed to submit review");
-        } finally {
-            setSubmittingReview(false);
-        }
     };
 
     // Same timestamp text as before, built once so both views can show it
@@ -331,107 +286,32 @@ export default function Bulletin24HrsPage() {
                             </div>
                         )}
 
-                        {/* ================= REVIEW SECTION (now at the bottom, after reading) ================= */}
+                        {/* ================= SHARE SECTION (NEW, shown in BOTH the short and the detailed view) ================= */}
+                        <section className="max-w-3xl mx-auto">
+                            <ShareBulletin />
+                        </section>
+
+                        {/* ================= REVIEW SECTION (shown in BOTH the short and the detailed view) ================= */}
+                        {/* The button opens the same pop-up as the right sidebar, the review goes to the admin for approval,
+                            and the button is disabled for logged-out visitors. */}
                         <section className="max-w-3xl mx-auto">
                             <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 sm:p-8">
-                                {!showReview ? (
-                                    <div className="flex flex-col sm:flex-row items-center justify-between gap-4 text-center sm:text-left">
-                                        <div className="flex items-center gap-4">
-                                            <span className="hidden sm:flex w-12 h-12 rounded-xl bg-gray-100 items-center justify-center flex-shrink-0">
-                                                <svg className="w-6 h-6 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
-                                                    <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                                                </svg>
-                                            </span>
-                                            <div>
-                                                <h4 className="text-lg font-semibold text-gray-800">How was this feature?</h4>
-                                                <p className="text-sm text-gray-600">Your feedback helps us improve</p>
-                                            </div>
-                                        </div>
-
-                                        {/* Reviews are saved per user, so logged-out visitors are asked to log in first */}
-                                        {status === "unauthenticated" ? (
-                                            <Link
-                                                href="/login"
-                                                className="flex-shrink-0 px-6 py-2.5 bg-gradient-to-r from-[#1C3B7A] to-[#104AC2] text-white rounded-lg hover:from-[#153163] hover:to-[#0d3a9f] transition-all font-semibold text-sm"
-                                            >
-                                                Login to Leave a Review
-                                            </Link>
-                                        ) : (
-                                            <button
-                                                onClick={() => setShowReview(true)}
-                                                className="flex-shrink-0 px-6 py-2.5 bg-gradient-to-r from-[#1C3B7A] to-[#104AC2] text-white rounded-lg hover:from-[#153163] hover:to-[#0d3a9f] transition-all font-semibold text-sm"
-                                            >
-                                                Leave a Review
-                                            </button>
-                                        )}
-                                    </div>
-                                ) : (
-                                    <div className="space-y-5">
-                                        <h4 className="text-lg font-semibold text-gray-800">Leave a Review</h4>
-
-                                        {/* Star rating (still saves a 1-5 number, exactly like before) */}
+                                <div className="flex flex-col sm:flex-row items-center justify-between gap-4 text-center sm:text-left">
+                                    <div className="flex items-center gap-4">
+                                        <span className="hidden sm:flex w-12 h-12 rounded-xl bg-gray-100 items-center justify-center flex-shrink-0">
+                                            <svg className="w-6 h-6 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
+                                                <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                                            </svg>
+                                        </span>
                                         <div>
-                                            <label className="block text-sm font-medium text-gray-700 mb-2">
-                                                Rating (1-5)
-                                            </label>
-                                            <div className="flex gap-1" onMouseLeave={() => setHoverRating(0)}>
-                                                {[1, 2, 3, 4, 5].map((num) => (
-                                                    <button
-                                                        key={num}
-                                                        type="button"
-                                                        onClick={() => setRating(num)}
-                                                        onMouseEnter={() => setHoverRating(num)}
-                                                        aria-label={`${num} star${num > 1 ? "s" : ""}`}
-                                                        className="p-1 transition-transform hover:scale-110 active:scale-95"
-                                                    >
-                                                        <svg
-                                                            className={`w-9 h-9 sm:w-10 sm:h-10 transition-colors ${(hoverRating || rating) >= num ? "text-yellow-400" : "text-gray-300"}`}
-                                                            fill="currentColor"
-                                                            viewBox="0 0 20 20"
-                                                        >
-                                                            <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                                                        </svg>
-                                                    </button>
-                                                ))}
-                                            </div>
-                                        </div>
-
-                                        {/* Comment */}
-                                        <div>
-                                            <label className="block text-sm font-medium text-gray-700 mb-2">
-                                                Comment (Optional)
-                                            </label>
-                                            <textarea
-                                                value={comment}
-                                                onChange={(e) => setComment(e.target.value)}
-                                                placeholder="Share your thoughts..."
-                                                rows={3}
-                                                maxLength={500}
-                                                className="w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#104AC2] resize-none text-sm sm:text-base"
-                                            />
-                                            <p className="text-xs text-gray-500 mt-1">
-                                                {comment.length}/500 characters
-                                            </p>
-                                        </div>
-
-                                        {/* Submit Buttons */}
-                                        <div className="flex flex-col sm:flex-row gap-3">
-                                            <button
-                                                onClick={handleReviewSubmit}
-                                                disabled={submittingReview || rating === 0}
-                                                className="flex-1 px-6 py-3 bg-gradient-to-r from-[#104AC2] to-[#1C3B7A] text-white rounded-xl hover:from-[#0d3da3] hover:to-[#152f61] shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all font-medium text-sm sm:text-base"
-                                            >
-                                                {submittingReview ? "Submitting..." : "Submit Review"}
-                                            </button>
-                                            <button
-                                                onClick={() => { setShowReview(false); setHoverRating(0); }}
-                                                className="px-6 py-3 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 transition-colors font-medium text-sm sm:text-base"
-                                            >
-                                                Cancel
-                                            </button>
+                                            <h4 className="text-lg font-semibold text-gray-800">How was this feature?</h4>
+                                            <p className="text-sm text-gray-600">Your feedback helps us improve</p>
                                         </div>
                                     </div>
-                                )}
+
+                                    {/* Shared button: opens the review pop-up (logged in) or stays disabled (logged out) */}
+                                    <AddReviewButton className="flex-shrink-0" />
+                                </div>
                             </div>
                         </section>
                     </div>
