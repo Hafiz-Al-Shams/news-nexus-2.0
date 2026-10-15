@@ -1,3 +1,4 @@
+// src>lib>gemini.js  (MODIFIED)
 import { GoogleGenAI } from "@google/genai";
 
 // Initialize with API key from environment
@@ -5,77 +6,84 @@ const ai = new GoogleGenAI({
   apiKey: process.env.GEMINI_API_KEY,
 });
 
+const MODEL = "gemini-2.5-flash";
+
+// Safely reads the answer text: joins all text parts and ignores "thought" parts (the model's internal thinking)
+function extractText(response) {
+  const parts = response?.candidates?.[0]?.content?.parts || [];
+  return parts
+    .filter((part) => typeof part.text === "string" && !part.thought) // skip thought parts and non-text parts
+    .map((part) => part.text)
+    .join("")
+    .trim();
+}
+
+// Turns the optional settings into a Gemini "config" object (only the settings that were passed)
+function buildConfig({ systemInstruction, maxOutputTokens, temperature, thinkingBudget } = {}) {
+  const config = {};
+  if (systemInstruction) config.systemInstruction = systemInstruction; // the hidden "job description"
+  if (typeof maxOutputTokens === "number") config.maxOutputTokens = maxOutputTokens; // cap the answer length
+  if (typeof temperature === "number") config.temperature = temperature; // lower = more factual
+  if (typeof thinkingBudget === "number") config.thinkingConfig = { thinkingBudget }; // 0 = thinking off
+  return config;
+}
+
+// Builds the "contents" array from the history + the new message
+function buildContents(userMessage, history) {
+  const contents = [];
+
+  for (const msg of history) {
+    contents.push({
+      role: msg.role === "assistant" ? "model" : "user",
+      parts: [{ text: msg.content }],
+    });
+  }
+
+  contents.push({ role: "user", parts: [{ text: userMessage }] });
+  return contents;
+}
+
 /**
- * Generate AI response (simple one-shot) with thinking enabled
+ * Generate AI response (simple one-shot), default settings (unchanged behavior)
  */
 export async function generateSimpleResponse(prompt) {
   try {
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
-      contents: [
-        {
-          role: "user",
-          parts: [{ text: prompt }]
-        }
-      ],
-      // Thinking mode is enabled by default, no need to set thinkingBudget: 0
-      // Removing config entirely to use defaults (thinking enabled)
+      model: MODEL,
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
     });
-    
-    // FIXED: Correct way to access response text
-    const text = response.candidates?.[0]?.content?.parts?.[0]?.text;
-    
-    if (!text) {
-      throw new Error("No valid response from AI");
-    }
-    
+
+    const text = extractText(response);
+    if (!text) throw new Error("No valid response from AI");
+
     return text;
   } catch (error) {
-    console.error("Gemini AI Error:", error);
+    console.error("Gemini AI Error:", error.message);
     throw new Error(error.message || "Failed to generate response");
   }
 }
 
 /**
- * Generate AI response with chat history and thinking enabled
+ * Generate AI response with chat history.
+ * options (all optional): { systemInstruction, maxOutputTokens, temperature, thinkingBudget }
+ * Called without options it behaves like before.
  */
-export async function generateChatResponse(userMessage, history = []) {
+export async function generateChatResponse(userMessage, history = [], options = {}) {
   try {
-    // Build the conversation contents
-    const contents = [];
-    
-    // Add history with proper formatting
-    for (const msg of history) {
-      contents.push({
-        role: msg.role === 'assistant' ? 'model' : 'user',
-        parts: [{ text: msg.content }]
-      });
-    }
-    
-    // Add current user message
-    contents.push({
-      role: 'user',
-      parts: [{ text: userMessage }]
-    });
+    const config = buildConfig(options);
 
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
-      contents: contents,
-      // Thinking mode enabled by default - removed thinkingBudget: 0
-      // This allows the AI to use extended thinking for better responses
+      model: MODEL,
+      contents: buildContents(userMessage, history),
+      ...(Object.keys(config).length > 0 && { config }), // only send config when something was set
     });
 
-    // FIXED: Proper response text extraction
-    const text = response.candidates?.[0]?.content?.parts?.[0]?.text;
-    
-    if (!text) {
-      throw new Error("No valid response from AI");
-    }
-    
+    const text = extractText(response);
+    if (!text) throw new Error("No valid response from AI"); // e.g. blocked or empty answer
+
     return text;
   } catch (error) {
-    console.error("Gemini AI Error:", error);
-    console.error("Full error details:", JSON.stringify(error, null, 2));
+    console.error("Gemini AI Error:", error.message); // message only: no full error dump in the logs
     throw new Error(error.message || "Failed to generate response");
   }
 }
@@ -83,33 +91,19 @@ export async function generateChatResponse(userMessage, history = []) {
 /**
  * Generate AI response with streaming support (optional - for future use)
  */
-export async function generateStreamingResponse(userMessage, history = []) {
+export async function generateStreamingResponse(userMessage, history = [], options = {}) {
   try {
-    const contents = [];
-    
-    // Add history
-    for (const msg of history) {
-      contents.push({
-        role: msg.role === 'assistant' ? 'model' : 'user',
-        parts: [{ text: msg.content }]
-      });
-    }
-    
-    // Add current message
-    contents.push({
-      role: 'user',
-      parts: [{ text: userMessage }]
-    });
+    const config = buildConfig(options);
 
-    // Return the streaming response
     const stream = await ai.models.generateContentStream({
-      model: "gemini-2.5-flash",
-      contents: contents,
+      model: MODEL,
+      contents: buildContents(userMessage, history),
+      ...(Object.keys(config).length > 0 && { config }),
     });
 
     return stream;
   } catch (error) {
-    console.error("Gemini AI Streaming Error:", error);
+    console.error("Gemini AI Streaming Error:", error.message);
     throw new Error(error.message || "Failed to generate streaming response");
   }
 }

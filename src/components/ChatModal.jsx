@@ -1,18 +1,33 @@
+// src>components>ChatModal.jsx  (MODIFIED)
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { useSession } from "next-auth/react";
 import Link from "next/link";
 import toast from "react-hot-toast";
 import { closeChat } from "@/store/slices/uiSlice";
 
-// Quick-start questions shown in the empty chat (one tap sends them)
+// CHANGED: project-focused quick-start questions (one tap sends them)
 const SUGGESTIONS = [
-  "Summarize today's top news",
-  "Explain a news topic simply",
-  "What's happening in technology?",
+  "How does the 24hrs bulletin work?",
+  "What's in today's bulletin?",
+  "What can I do without an account?",
+  "How do AI summaries work?",
 ];
+
+const MAX_INPUT = 500; // same limit the server enforces
+
+// Formats the reset time in the visitor's own time zone, e.g. "Oct 16, 3:20 PM"
+function formatReset(resetAt) {
+  if (!resetAt) return "later";
+  return new Date(resetAt).toLocaleString([], {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
 
 export default function ChatModal() {
   const dispatch = useDispatch();
@@ -28,10 +43,33 @@ export default function ChatModal() {
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
 
+  // NEW: quota info from the SERVER ({ remaining, limit, resetAt }). Clearing the chat never touches it.
+  const [quota, setQuota] = useState(null);
+  // NEW: true when the global daily limit was hit ("temporarily unavailable")
+  const [globalBlocked, setGlobalBlocked] = useState(false);
+
+  // NEW: derived flags that lock the input
+  const limitReached = quota !== null && quota.remaining <= 0;
+  const inputBlocked = limitReached || globalBlocked;
+
   // Two flags make the open/close animation smooth:
   // "render" keeps the modal in the page, "shown" plays the slide + fade transition
   const [render, setRender] = useState(false);
   const [shown, setShown] = useState(false);
+
+  // NEW: loads the quota WITHOUT consuming it
+  const loadUsage = useCallback(async () => {
+    try {
+      const res = await fetch("/api/ai/chat/usage", { cache: "no-store" });
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data.success) {
+        setQuota({ remaining: data.remaining, limit: data.limit, resetAt: data.resetAt });
+      }
+    } catch {
+      // the counter simply stays hidden if this fails; the server still enforces the limit
+    }
+  }, []);
 
   useEffect(() => {
     if (isOpen) {
@@ -44,6 +82,22 @@ export default function ChatModal() {
     return () => clearTimeout(t);
   }, [isOpen]);
 
+  // NEW: every time the modal opens for a logged-in user, load the counter (and forget an old "unavailable" state)
+  useEffect(() => {
+    if (isOpen && isLoggedIn) {
+      setGlobalBlocked(false);
+      loadUsage();
+    }
+  }, [isOpen, isLoggedIn, loadUsage]);
+
+  // NEW: when the limit is reached, reload the usage automatically right after the reset time, so the input unlocks by itself
+  useEffect(() => {
+    if (!isOpen || !isLoggedIn || !limitReached || !quota?.resetAt) return;
+    const delay = Math.max(new Date(quota.resetAt).getTime() - Date.now() + 1500, 1000);
+    const t = setTimeout(loadUsage, delay);
+    return () => clearTimeout(t);
+  }, [isOpen, isLoggedIn, limitReached, quota?.resetAt, loadUsage]);
+
   // Close with the Escape key
   useEffect(() => {
     if (!isOpen) return;
@@ -54,24 +108,26 @@ export default function ChatModal() {
     return () => document.removeEventListener("keydown", onKey);
   }, [isOpen, dispatch]);
 
-  // Focus the input when the modal opens (only possible for logged-in users)
+  // Focus the input when the modal opens (only possible for logged-in users with messages left)
   useEffect(() => {
-    if (shown && isLoggedIn) {
+    if (shown && isLoggedIn && !inputBlocked) {
       const t = setTimeout(() => inputRef.current?.focus(), 150);
       return () => clearTimeout(t);
     }
-  }, [shown, isLoggedIn]);
+  }, [shown, isLoggedIn, inputBlocked]);
 
   // Auto-scroll to the newest message
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, loading, shown]);
 
-  // When the user logs out, wipe the conversation so the next person never sees it
+  // When the user logs out, wipe the conversation (and the counter) so the next person never sees it
   useEffect(() => {
     if (status === "unauthenticated") {
       setMessages([]);
       setInput("");
+      setQuota(null);
+      setGlobalBlocked(false);
     }
   }, [status]);
 
@@ -80,7 +136,7 @@ export default function ChatModal() {
   // Sends a message (the typed text, or a suggestion chip text passed in)
   const sendMessage = async (override) => {
     const text = (typeof override === "string" ? override : input).trim();
-    if (!text || loading) return;
+    if (!text || loading || inputBlocked) return; // CHANGED: also blocked while the limit is reached
 
     const userMessage = { role: "user", content: text };
 
@@ -91,8 +147,8 @@ export default function ChatModal() {
     setLoading(true);
 
     try {
-      // The API expects {role: "user"/"assistant", content: "text"}
-      const history = messages.map((msg) => ({
+      // The API expects {role: "user"/"assistant", content: "text"}. Only the last 6 are sent (the server also trims).
+      const history = messages.slice(-6).map((msg) => ({
         role: msg.role,
         content: msg.content,
       }));
@@ -103,33 +159,50 @@ export default function ChatModal() {
         body: JSON.stringify({ message: text, history }),
       });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+      const data = await response.json().catch(() => ({}));
+
+      // CHANGED: keep the server's error code, so 429 limits get their own friendly handling
+      if (!response.ok || !data.success) {
+        const err = new Error(data.error || `HTTP error! status: ${response.status}`);
+        err.code = data.code;
+        err.data = data;
+        throw err;
       }
 
-      const data = await response.json();
-
-      if (data.success && data.response) {
+      if (data.response) {
         setMessages((prev) => [...prev, { role: "assistant", content: data.response }]);
+        // NEW: update the counter from every successful answer
+        if (typeof data.remaining === "number") {
+          setQuota({ remaining: data.remaining, limit: data.limit, resetAt: data.resetAt });
+        }
       } else {
-        throw new Error(data.error || "Failed to get response");
+        throw new Error("Failed to get response");
       }
     } catch (error) {
-      console.error("Chat error:", error);
+      console.error("Chat error:", error.message);
 
       // Remove the user message if the request failed
       setMessages((prev) => prev.slice(0, -1));
 
-      if (error.message.includes("Unauthorized")) {
-        toast.error("Please login to use AI chat");
-      } else if (error.message.includes("quota") || error.message.includes("rate limit")) {
-        toast.error("Service temporarily unavailable. Please try again later.");
+      if (error.code === "USER_LIMIT") {
+        // NEW: personal daily limit reached -> the banner below the chat explains it, no generic toast
+        setQuota({
+          remaining: 0,
+          limit: error.data?.limit ?? quota?.limit ?? null,
+          resetAt: error.data?.resetAt ?? null,
+        });
+      } else if (error.code === "GLOBAL_LIMIT") {
+        // NEW: all users together used today's budget
+        setGlobalBlocked(true);
       } else {
-        toast.error(error.message || "Failed to get AI response");
+        // The server refunded the message, so the counter does not change
+        if (error.message.includes("Unauthorized")) {
+          toast.error("Please login to use AI chat");
+        } else {
+          toast.error(error.message || "Failed to get AI response");
+        }
+        setInput(text); // give the text back so nothing is lost
       }
-
-      setInput(text); // give the text back so nothing is lost
     } finally {
       setLoading(false);
       inputRef.current?.focus();
@@ -144,9 +217,10 @@ export default function ChatModal() {
     }
   };
 
+  // Clearing the chat only empties the screen. The quota lives on the server, so it is NOT reset.
   const clearChat = () => {
     if (messages.length === 0) return;
-    if (confirm("Are you sure you want to clear the chat history?")) {
+    if (confirm("Are you sure you want to clear the chat history? (Your daily message limit is not reset.)")) {
       setMessages([]);
       toast.success("Chat cleared");
     }
@@ -228,7 +302,7 @@ export default function ChatModal() {
             </div>
             <h3 className="text-xl font-bold text-gray-900 mb-2">Login to chat with NewsNexus Assistant</h3>
             <p className="text-sm text-gray-600 mb-6">
-              Sign in to ask questions, get news explained simply and chat with our AI.
+              Sign in to ask questions about NewsNexus and get today&apos;s news explained.
             </p>
             <Link
               href="/login"
@@ -264,14 +338,15 @@ export default function ChatModal() {
                   <h3 className="text-lg font-bold text-gray-900 mb-1">
                     {firstName ? `Hi ${firstName}, how can I help?` : "Hi there, how can I help?"}
                   </h3>
-                  <p className="text-sm text-gray-600 mb-5">Ask me anything about the news, or try one of these:</p>
+                  <p className="text-sm text-gray-600 mb-5">Ask me about NewsNexus or today&apos;s bulletin, or try one of these:</p>
                   <div className="w-full space-y-2">
                     {SUGGESTIONS.map((text) => (
                       <button
                         key={text}
                         type="button"
                         onClick={() => sendMessage(text)}
-                        className="w-full text-left px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm text-gray-700 hover:border-[#104AC2] hover:text-[#104AC2] hover:shadow-sm transition-all"
+                        disabled={inputBlocked || loading} // CHANGED: chips are locked too when the limit is reached
+                        className="w-full text-left px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm text-gray-700 hover:border-[#104AC2] hover:text-[#104AC2] hover:shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         {text}
                       </button>
@@ -327,14 +402,27 @@ export default function ChatModal() {
 
             {/* Input area */}
             <div className="flex-shrink-0 bg-white border-t border-gray-200 px-4 pt-3 pb-3">
+              {/* NEW: limit banners (same yellow classes the project already remaps for dark mode) */}
+              {limitReached && (
+                <div className="mb-3 rounded-xl bg-yellow-50 border border-yellow-200 px-3 py-2 text-xs text-yellow-800">
+                  Daily limit reached. Resets at {formatReset(quota?.resetAt)}.
+                </div>
+              )}
+              {!limitReached && globalBlocked && (
+                <div className="mb-3 rounded-xl bg-yellow-50 border border-yellow-200 px-3 py-2 text-xs text-yellow-800">
+                  The assistant is temporarily unavailable. Please try again later.
+                </div>
+              )}
+
               <div className="flex items-end gap-2">
                 <textarea
                   ref={inputRef}
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={handleKeyDown}
-                  placeholder="How can I help?" // requested placeholder
-                  disabled={loading}
+                  placeholder={inputBlocked ? "Chat is paused" : "How can I help?"} // CHANGED: placeholder follows the state
+                  disabled={loading || inputBlocked} // CHANGED: also disabled when the limit is reached
+                  maxLength={MAX_INPUT} // the server enforces the same 500 limit
                   rows={1}
                   className="flex-1 px-4 py-3 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#104AC2] focus:border-transparent disabled:opacity-60 resize-none overflow-y-auto transition-all"
                   style={{ minHeight: "46px", maxHeight: "120px" }}
@@ -347,7 +435,7 @@ export default function ChatModal() {
                 {/* Round send button */}
                 <button
                   onClick={() => sendMessage()}
-                  disabled={loading || !input.trim()}
+                  disabled={loading || inputBlocked || !input.trim()} // CHANGED: locked when the limit is reached
                   aria-label="Send message"
                   className="w-[46px] h-[46px] flex-shrink-0 rounded-xl bg-gradient-to-r from-[#1C3B7A] to-[#104AC2] text-white flex items-center justify-center hover:from-[#153163] hover:to-[#0d3a9f] disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-md hover:shadow-lg"
                 >
@@ -360,8 +448,15 @@ export default function ChatModal() {
                   )}
                 </button>
               </div>
-              {/* Requested disclaimer under the input */}
+
+              {/* NEW: message counter + disclaimer */}
               <p className="text-[11px] text-gray-500 text-center mt-2">
+                {quota && (
+                  <span className="font-medium">
+                    {quota.remaining} of {quota.limit} messages left
+                  </span>
+                )}
+                {quota && " · "}
                 AI can make mistakes. Double-check for accuracy.
               </p>
             </div>
