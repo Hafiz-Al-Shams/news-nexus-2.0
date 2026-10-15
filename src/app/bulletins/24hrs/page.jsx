@@ -7,7 +7,8 @@ import toast from "react-hot-toast";
 import Link from "next/link";
 import SpeakButton from "@/components/SpeakButton"; // text to speech button
 import AddReviewButton from "@/components/AddReviewButton"; // the same review button + pop-up used in the right sidebar
-import ShareBulletin from "@/components/ShareBulletin"; // NEW: Facebook / X / Instagram share buttons
+import ShareBulletin from "@/components/ShareBulletin"; // Facebook / X / Instagram share buttons
+import SiteFooter from "@/components/SiteFooter"; // NEW: the same footer as About, Careers, Help ...
 
 // Small helper: 1 -> "01", 12 -> "12" (used for the number badges)
 const pad = (n) => String(n).padStart(2, "0");
@@ -63,7 +64,8 @@ export default function Bulletin24HrsPage() {
         : null;
 
     return (
-        <div className="min-h-screen bg-gray-50 relative">
+        // CHANGED: flex column, so the footer is pushed to the bottom even when the content is short
+        <div className="min-h-screen bg-gray-50 relative flex flex-col">
             {/* Website Name - Top Left (UNCHANGED) */}
             <Link href="/" className="absolute top-6 left-6 sm:top-8 sm:left-8 z-50">
                 <h1 className="text-base lg:text-2xl font-bold">
@@ -79,8 +81,8 @@ export default function Bulletin24HrsPage() {
                 </h2>
             </div>
 
-            {/* Main Content (extra top padding keeps everything clear of the navbar) */}
-            <main className="container mx-auto px-4 pt-24 pb-16 sm:pt-28">
+            {/* Main Content (flex-1 takes all free height; extra top padding keeps everything clear of the navbar) */}
+            <main className="flex-1 w-full container mx-auto px-4 pt-24 pb-16 sm:pt-28">
                 {/* ===== Loading State: spinner + soft skeleton cards ===== */}
                 {bulletin.loading && (
                     <div className="max-w-3xl mx-auto">
@@ -127,17 +129,20 @@ export default function Bulletin24HrsPage() {
                 {!bulletin.loading && !bulletin.error && bulletin.bullets.length > 0 && (
                     <div className="max-w-6xl mx-auto space-y-8">
 
-                        {/* ================= SHORT VIEW: 12 numbered bullets ================= */}
+                        {/* ================= SHORT VIEW: header (with the "full picture" card) + 12 numbered bullets ================= */}
                         {!showDetails && (
-                            <div className="max-w-3xl mx-auto space-y-6">
-                                {/* Hero card (brand gradient) */}
+                            <div className="max-w-4xl mx-auto space-y-6">
+                                {/* Hero card (brand gradient).
+                                    CHANGED: two columns on large screens (text left, "full picture" card right),
+                                    stacked on phones and tablets. */}
                                 <section className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#1C3B7A] to-[#104AC2] p-6 sm:p-10 text-white shadow-xl">
                                     {/* Soft decorative glows */}
                                     <div className="pointer-events-none absolute -top-16 -right-16 w-56 h-56 rounded-full bg-white/10 blur-2xl"></div>
                                     <div className="pointer-events-none absolute -bottom-20 -left-10 w-64 h-64 rounded-full bg-white/5 blur-2xl"></div>
 
-                                    <div className="relative flex flex-wrap items-end justify-between gap-6">
-                                        <div className="min-w-0">
+                                    <div className="relative grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_17rem] gap-6 lg:gap-8 items-stretch">
+                                        {/* ----- Left column: badge, title, timestamp, Listen button ----- */}
+                                        <div className="min-w-0 flex flex-col items-start">
                                             <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/15 text-xs font-medium mb-4">
                                                 <span className="w-1.5 h-1.5 rounded-full bg-green-400"></span>
                                                 AI Prioritized Top News Today
@@ -152,10 +157,50 @@ export default function Bulletin24HrsPage() {
                                                     Last Updated at {updatedText}
                                                 </p>
                                             )}
+
+                                            {/* Reads all 12 bullets aloud, one after another (mt-auto keeps it at the column bottom) */}
+                                            <div className="mt-6 lg:mt-auto lg:pt-6">
+                                                <SpeakButton text={bulletin.bullets} label="Listen to Bulletin" className="shadow-lg" />
+                                            </div>
                                         </div>
 
-                                        {/* Reads all 12 bullets aloud, one after another */}
-                                        <SpeakButton text={bulletin.bullets} label="Listen to Bulletin" className="shadow-lg" />
+                                        {/* ----- Right column: "Want the full picture?" card (moved here from the page bottom) ----- */}
+                                        <div className="rounded-2xl bg-white/10 border border-white/20 backdrop-blur-sm p-5 flex flex-col justify-between gap-4">
+                                            <div>
+                                                <span className="w-10 h-10 rounded-xl bg-white/15 flex items-center justify-center mb-3">
+                                                    {/* Eye icon (same one the old button used) */}
+                                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                                    </svg>
+                                                </span>
+                                                <p className="font-bold text-lg leading-snug">Want the full picture?</p>
+                                                <p className="text-sm text-white/75 mt-1">
+                                                    Get a deeper AI breakdown of every story, with context and key facts.
+                                                </p>
+                                            </div>
+
+                                            {/* Fixed white button + fixed navy text, so dark mode's bg-white remap can't change it */}
+                                            <button
+                                                onClick={handleShowDetails}
+                                                disabled={bulletin.loading}
+                                                className="w-full px-5 py-3 bg-[#ffffff] text-[#0b2a6b] rounded-xl hover:bg-[#e8efff] disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg hover:shadow-xl font-semibold text-sm flex items-center justify-center gap-2"
+                                            >
+                                                {bulletin.loading ? (
+                                                    <>
+                                                        <div className="w-4 h-4 border-2 border-[#0b2a6b] border-t-transparent rounded-full animate-spin"></div>
+                                                        Generating...
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        Show More Details
+                                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                                                        </svg>
+                                                    </>
+                                                )}
+                                            </button>
+                                        </div>
                                     </div>
                                 </section>
 
@@ -177,37 +222,11 @@ export default function Bulletin24HrsPage() {
                                     ))}
                                 </ol>
 
-                                {/* Call to action: open the detailed view */}
-                                <div className="rounded-2xl border border-gray-200 bg-white p-5 sm:p-6 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">
-                                    <div className="text-center sm:text-left">
-                                        <p className="font-semibold text-gray-900 text-base sm:text-lg">Want the full picture?</p>
-                                        <p className="text-sm text-gray-600">Get a deeper AI breakdown of every story, with context and key facts.</p>
-                                    </div>
-                                    <button
-                                        onClick={handleShowDetails}
-                                        disabled={bulletin.loading}
-                                        className="flex-shrink-0 px-6 sm:px-8 py-3 bg-gradient-to-r from-[#1C3B7A] to-[#104AC2] text-white rounded-xl hover:from-[#153163] hover:to-[#0d3a9f] disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg hover:shadow-xl font-semibold text-sm sm:text-base flex items-center gap-3"
-                                    >
-                                        {bulletin.loading ? (
-                                            <>
-                                                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                                                Generating...
-                                            </>
-                                        ) : (
-                                            <>
-                                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                                                </svg>
-                                                Show More Details
-                                            </>
-                                        )}
-                                    </button>
-                                </div>
+                                {/* REMOVED: the old "Want the full picture?" card that was here (it is in the header now) */}
                             </div>
                         )}
 
-                        {/* ================= DETAILED VIEW: story cards ================= */}
+                        {/* ================= DETAILED VIEW: story cards (UNCHANGED) ================= */}
                         {showDetails && bulletin.detailedCards.length > 0 && (
                             <div className="space-y-6">
                                 {/* Hero card with Back + Listen */}
@@ -286,15 +305,15 @@ export default function Bulletin24HrsPage() {
                             </div>
                         )}
 
-                        {/* ================= SHARE SECTION (NEW, shown in BOTH the short and the detailed view) ================= */}
-                        <section className="max-w-3xl mx-auto">
+                        {/* ================= SHARE SECTION (shown in BOTH the short and the detailed view) ================= */}
+                        <section className="max-w-4xl mx-auto">
                             <ShareBulletin />
                         </section>
 
                         {/* ================= REVIEW SECTION (shown in BOTH the short and the detailed view) ================= */}
                         {/* The button opens the same pop-up as the right sidebar, the review goes to the admin for approval,
                             and the button is disabled for logged-out visitors. */}
-                        <section className="max-w-3xl mx-auto">
+                        <section className="max-w-4xl mx-auto">
                             <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 sm:p-8">
                                 <div className="flex flex-col sm:flex-row items-center justify-between gap-4 text-center sm:text-left">
                                     <div className="flex items-center gap-4">
@@ -330,6 +349,10 @@ export default function Bulletin24HrsPage() {
                     </div>
                 )}
             </main>
+
+            {/* NEW: the exact same footer as the About / Careers / Help / Contact / Terms / Privacy pages.
+                Shown in the short view, the detailed view and the loading / error / empty states. */}
+            <SiteFooter />
         </div>
     );
 }

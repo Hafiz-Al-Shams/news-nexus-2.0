@@ -1,8 +1,8 @@
-// src>components>StaticPageLayout.jsx  (NEW)
+// src>components>StaticPageLayout.jsx  (MODIFIED)
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation"; // used to highlight the current page in the footer links
+import SiteFooter from "./SiteFooter"; // CHANGED: the footer now lives in its own shared component
 
 // ---------- Tiny icon set (outline icons, same style as the rest of the project) ----------
 // Usage: <Icon name="mail" className="w-5 h-5" />
@@ -51,15 +51,7 @@ export function SectionHeading({ eyebrow, title, subtitle, center = false }) {
   );
 }
 
-// Links shown in the footer of every static page
-const PAGE_LINKS = [
-  { href: "/about", label: "About Us" },
-  { href: "/careers", label: "Careers" },
-  { href: "/help", label: "Help Center" },
-  { href: "/contact", label: "Contact" },
-  { href: "/terms", label: "Terms of Use" },
-  { href: "/privacy", label: "Privacy Policy" },
-];
+// REMOVED: PAGE_LINKS (the footer links now live in SiteFooter)
 
 // ---------- The shared page frame ----------
 // pageTitle  = small title at the top-right (same as the other pages)
@@ -74,8 +66,6 @@ export default function StaticPageLayout({
   children,
   widthClass = "max-w-5xl",
 }) {
-  const pathname = usePathname(); // current URL, used to highlight the active footer link
-
   return (
     <div className="min-h-screen bg-gray-50 relative flex flex-col">
       {/* Website name, top-left: links back to the NewsNexus homepage */}
@@ -115,42 +105,8 @@ export default function StaticPageLayout({
         <div className="mt-10 sm:mt-14 space-y-14 sm:space-y-20">{children}</div>
       </main>
 
-      {/* Footer: links to the other static pages + back to home */}
-      <footer className="border-t border-gray-200 bg-white">
-        <div className="max-w-6xl mx-auto px-4 py-8 flex flex-col items-center gap-5">
-          <nav aria-label="Footer" className="flex flex-wrap items-center justify-center gap-x-2 gap-y-2">
-            {PAGE_LINKS.map((link) => {
-              const active = pathname === link.href;
-              return (
-                <Link
-                  key={link.href}
-                  href={link.href}
-                  aria-current={active ? "page" : undefined}
-                  className={`px-3 py-1.5 rounded-lg text-sm transition-colors ${
-                    active
-                      ? "bg-gray-100 text-[#104AC2] font-semibold"
-                      : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
-                  }`}
-                >
-                  {link.label}
-                </Link>
-              );
-            })}
-          </nav>
-
-          <Link
-            href="/"
-            className="inline-flex items-center gap-2 text-sm font-medium text-[#104AC2] hover:text-[#1C3B7A] transition-colors"
-          >
-            <Icon name="home" className="w-4 h-4" />
-            Back to NewsNexus
-          </Link>
-
-          <p className="text-xs text-gray-500 text-center">
-            ©{new Date().getFullYear()} NewsNexus. All Rights Reserved.
-          </p>
-        </div>
-      </footer>
+      {/* CHANGED: the footer is now the shared component (identical on the bulletin page) */}
+      <SiteFooter />
     </div>
   );
 }
