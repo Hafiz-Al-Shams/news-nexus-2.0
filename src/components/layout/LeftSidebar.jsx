@@ -239,7 +239,7 @@ export default function LeftSidebar({ isDrawerMode = false, onLinkClick }) {
       {/* Footer */}
       <div className="border-t border-gray-200 px-4 py-4">
         <p className="text-xs text-gray-500 text-center">
-          ©2025 NewsNexus. All Rights Reserved.
+          ©{new Date().getFullYear()} NewsNexus. All Rights Reserved.
         </p>
       </div>
     </div>
