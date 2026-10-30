@@ -64,9 +64,7 @@ It is a full-stack application built with **Next.js 15** and **React 19**. It us
   - Persistent light and dark mode switch  
   - Saves user preference in `localStorage`  
 
-✅ **Responsive Design:** Fully responsive layouts with a mobile menu and user menu for phone, tablet, and desktop screens.  
-
-✅ **Informational Pages & Interface Extras:** About, Careers, Help, Contact, Terms of Use, and Privacy Policy pages, a shared footer, a world-time bar on the homepage, and a back-to-top control.  
+✅ **Responsive Design:** Fully responsive layouts with a mobile menu and user menu for phone, tablet, and desktop screens.
 
 ---
 
@@ -106,7 +104,7 @@ Follow these steps to run the project locally:
 1. **Clone the repository:**  
    ```sh
    git clone https://github.com/Hafiz-Al-Shams/news-nexus-2.0.git
-   cd NewsNexus
+   cd news-nexus-2.0
    ```
 
 2. **Install dependencies:**  

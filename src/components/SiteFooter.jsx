@@ -1,45 +1,36 @@
-// src>components>SiteFooter.jsx  (NEW)
-// The ONE footer used by the static pages (About, Careers, Help, Contact, Terms, Privacy)
-// AND by the bulletin page, so it always looks exactly the same.
+// src>components>SiteFooter.jsx  (MODIFIED)
+// The ONE footer used by the bulletin page and the newsletter page, so it always looks exactly the same.
+// The 6 footer labels (About Us, Careers, Help Center, Contact, Terms of Use, Privacy Policy)
+// are now inactive placeholders: those pages were deleted, so the labels are plain text with no link.
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation"; // used to highlight the current page in the footer links
 
-// Links shown in the footer (moved here from StaticPageLayout)
+// Labels shown in the footer (CHANGED: no href anymore, because the pages do not exist)
 const PAGE_LINKS = [
-  { href: "/about", label: "About Us" },
-  { href: "/careers", label: "Careers" },
-  { href: "/help", label: "Help Center" },
-  { href: "/contact", label: "Contact" },
-  { href: "/terms", label: "Terms of Use" },
-  { href: "/privacy", label: "Privacy Policy" },
+  { label: "About Us" },
+  { label: "Careers" },
+  { label: "Help Center" },
+  { label: "Contact" },
+  { label: "Terms of Use" },
+  { label: "Privacy Policy" },
 ];
 
 export default function SiteFooter() {
-  const pathname = usePathname(); // current URL, used to highlight the active footer link
-
   return (
     <footer className="border-t border-gray-200 bg-white">
       <div className="max-w-6xl mx-auto px-4 py-8 flex flex-col items-center gap-5">
         <nav aria-label="Footer" className="flex flex-wrap items-center justify-center gap-x-2 gap-y-2">
-          {PAGE_LINKS.map((link) => {
-            const active = pathname === link.href;
-            return (
-              <Link
-                key={link.href}
-                href={link.href}
-                aria-current={active ? "page" : undefined}
-                className={`px-3 py-1.5 rounded-lg text-sm transition-colors ${
-                  active
-                    ? "bg-gray-100 text-[#104AC2] font-semibold"
-                    : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
-                }`}
-              >
-                {link.label}
-              </Link>
-            );
-          })}
+          {PAGE_LINKS.map((item) => (
+            // CHANGED: a plain <span> instead of <Link>, so clicking does nothing.
+            // The "active page" highlight was removed because no footer label is a page anymore.
+            <span
+              key={item.label}
+              className="px-3 py-1.5 rounded-lg text-sm transition-colors text-gray-600 hover:text-gray-900 hover:bg-gray-50"
+            >
+              {item.label}
+            </span>
+          ))}
         </nav>
 
         <Link
